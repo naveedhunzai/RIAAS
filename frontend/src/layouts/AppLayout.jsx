@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+﻿import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
   Upload,
@@ -53,7 +53,7 @@ export default function AppLayout() {
           <header className="h-14 bg-white border-b flex items-center px-4 justify-between">
             <div className="font-medium">RIAAS Console</div>
             <div className="text-xs text-zinc-500">
-              Backend: http://127.0.0.1:8000
+              Backend: {import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000"}
             </div>
           </header>
 
@@ -65,3 +65,4 @@ export default function AppLayout() {
     </div>
   );
 }
+

@@ -1,8 +1,7 @@
-import json
+﻿import json
 import re
 from typing import Any
-
-from app.rag.ollama_client import ollama_generate
+from backend.app.rag.ollama_client import ollama_generate
 
 
 def _extract_json(text: str) -> Any:
@@ -21,7 +20,7 @@ ALLOWED_MODALITIES = {"MUST", "SHALL", "PROHIBITED", "SHOULD"}
 ALLOWED_CATEGORIES = {"Reporting", "Recordkeeping", "Training", "Monitoring", "Governance", "Other"}
 
 CATEGORY_MAP = {
-    # model outputs → your taxonomy
+    # model outputs â†’ your taxonomy
     "Prevention": "Monitoring",
     "Detective": "Monitoring",
     "Detection": "Monitoring",
@@ -150,3 +149,4 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
             "priority": (item.get("priority") or "Medium").strip(),
         })
     return cleaned
+

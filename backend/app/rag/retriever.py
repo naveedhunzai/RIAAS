@@ -1,8 +1,7 @@
-from pathlib import Path
+﻿from pathlib import Path
 import chromadb
 from chromadb.config import Settings
-
-from app.config import VECTOR_DB_DIR
+from backend.app.config import VECTOR_DB_DIR
 
 def get_collection(name: str = "riaas_docs"):
     db_path = str(Path(VECTOR_DB_DIR))
@@ -22,3 +21,4 @@ def upsert_chunks(collection, chunks: list[dict], embeddings):
         metadatas=metadatas,
         embeddings=embeddings.tolist() if hasattr(embeddings, "tolist") else embeddings
     )
+

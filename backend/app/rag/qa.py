@@ -1,4 +1,4 @@
-from app.rag.retriever import get_collection
+﻿from backend.app.rag.retriever import get_collection
 
 def retrieve(question: str, top_k: int = 5):
     """Raw Chroma results (kept for debugging)."""
@@ -51,3 +51,4 @@ def retrieve_context(question: str, top_k: int = 5):
         )
 
     return contexts, citations
+

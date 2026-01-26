@@ -13,14 +13,13 @@ def ollama_generate(
         "model": model or settings.MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": temperature
-        }
+        "options": {"temperature": temperature},
     }
 
-    response = requests.post(url, json=payload, timeout=timeout)
-    response.raise_for_status()
+    r = requests.post(url, json=payload, timeout=timeout)
+    r.raise_for_status()
+    return r.json().get("response", "").strip()
 
-    data = response.json()
-    return data.get("response", "").strip()
+if __name__ == "__main__":
+    print(ollama_generate("Explain SAR safe harbor in one sentence."))
 

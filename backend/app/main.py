@@ -1,35 +1,79 @@
-from fastapi import FastAPI, HTTPException
+﻿from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from app.rag.qa import retrieve_context
-from app.rag.ollama_client import ollama_generate
-from app.db.sqlite_db import init_db, insert_requirement, list_requirements, get_requirement, insert_action, list_actions, update_action_status
-from app.rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
+
+from backend.app.core.validate_env import validate_settings
+from backend.app.core.config import settings
+
+from backend.app.rag.qa import retrieve_context, retrieve_clean
+from backend.app.rag.ollama_client import ollama_generate
+from backend.app.rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
+
+from backend.app.db.sqlite_db import (
+    init_db,
+    insert_requirement,
+    list_requirements,
+    get_requirement,
+    insert_action,
+    list_actions,
+    update_action_status,
+)
+
+from backend.app.config import RAW_DOCS_DIR
+from backend.app.ingest.loader import load_pdfs
+from backend.app.ingest.chunker import chunk_documents
+from backend.app.ingest.embedder import embed_chunks
+from backend.app.rag.retriever import get_collection, upsert_chunks
 
 
-from app.config import RAW_DOCS_DIR
-from app.ingest.loader import load_pdfs
-from app.ingest.chunker import chunk_documents
-from app.ingest.embedder import embed_chunks
-from app.rag.retriever import get_collection, upsert_chunks
-from app.rag.qa import retrieve_clean
+# -------------------------
+# App init
+# -------------------------
+validate_settings()
 
-app = FastAPI(title="RIAAS Backend", version="0.1.0")
-init_db()
+app = FastAPI(
+    title="RIAAS Backend",
+    version="0.1.0",
+    debug=(settings.APP_ENV == "dev"),
+)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Run DB init on startup (reload-safe)
+@app.on_event("startup")
+def _startup():
+    init_db()
 
 
+# -------------------------
+# Schemas
+# -------------------------
 class IngestResponse(BaseModel):
     loaded_pages: int
     total_chunks: int
+
 
 class AnswerRequest(BaseModel):
     question: str
     top_k: int = 5
     model: str = "gemma3:1b"
 
+
 class AskResponse(BaseModel):
     question: str
     top_k: int
     results: list[dict]
+
 
 class ExtractRequirementsRequest(BaseModel):
     topic: str
@@ -45,11 +89,17 @@ class UpdateActionStatusRequest(BaseModel):
     status: str  # Open / In Progress / Done
 
 
+# -------------------------
+# Endpoints
+# -------------------------
 @app.post("/ingest", response_model=IngestResponse)
 def ingest():
     docs = load_pdfs(RAW_DOCS_DIR)
     if not docs:
-        raise HTTPException(status_code=400, detail="No PDF text loaded. Put PDFs in backend/data/raw_docs/")
+        raise HTTPException(
+            status_code=400,
+            detail="No PDF text loaded. Put PDFs in backend/data/raw_docs/",
+        )
 
     chunks = chunk_documents(docs, chunk_size=800, overlap=150)
     embeddings = embed_chunks(chunks)
@@ -60,16 +110,20 @@ def ingest():
     return IngestResponse(loaded_pages=len(docs), total_chunks=len(chunks))
 
 
-@app.get("/ask")
+@app.get("/ask", response_model=AskResponse)
 def ask(question: str, top_k: int = 5):
-    if not question.strip():
+    q = (question or "").strip()
+    if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    return {
-        "question": question,
-        "top_k": top_k,
-        "results": retrieve_clean(question, top_k=top_k)
-    }
+    top_k = max(1, min(top_k, 20))
+
+    return AskResponse(
+        question=q,
+        top_k=top_k,
+        results=retrieve_clean(q, top_k=top_k),
+    )
+
 
 @app.post("/answer")
 def answer(req: AnswerRequest):
@@ -77,7 +131,9 @@ def answer(req: AnswerRequest):
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    contexts, citations = retrieve_context(q, top_k=req.top_k)
+    top_k = max(1, min(req.top_k, 20))
+
+    contexts, citations = retrieve_context(q, top_k=top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -100,11 +156,12 @@ def answer(req: AnswerRequest):
     return {
         "question": q,
         "model": req.model,
-        "top_k": req.top_k,
+        "top_k": top_k,
         "answer": response_text,
         "citations": citations,
-        "sources": sources
+        "sources": sources,
     }
+
 
 @app.post("/extract-requirements")
 def extract_requirements(req: ExtractRequirementsRequest):
@@ -112,8 +169,10 @@ def extract_requirements(req: ExtractRequirementsRequest):
     if not topic:
         raise HTTPException(status_code=400, detail="topic cannot be empty")
 
-    # retrieve context from vector DB
-    contexts, citations = retrieve_context(topic, top_k=req.top_k)
+    top_k = max(1, min(req.top_k, 30))
+
+    # Retrieve context from vector DB
+    contexts, citations = retrieve_context(topic, top_k=top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -123,7 +182,7 @@ def extract_requirements(req: ExtractRequirementsRequest):
     # Map citation_id -> (source,page)
     cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
 
-    saved_ids = []
+    saved_ids: list[int] = []
     for r in extracted:
         cid = r.get("citation_id")
         source, page = (None, None)
@@ -144,12 +203,14 @@ def extract_requirements(req: ExtractRequirementsRequest):
         "topic": topic,
         "retrieved_citations": citations,
         "extracted_count": len(extracted),
-        "saved_requirement_ids": saved_ids
+        "saved_requirement_ids": saved_ids,
     }
 
 
 @app.get("/requirements")
 def requirements(limit: int = 100, offset: int = 0):
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
     return {"items": list_requirements(limit=limit, offset=offset)}
 
 
@@ -169,7 +230,7 @@ def requirement_to_actions(req_id: int, req_body: CreateActionsRequest):
 
     actions = extract_actions_for_requirement(r["requirement_text"], model=req_body.model)
 
-    action_ids = []
+    action_ids: list[int] = []
     for a in actions:
         aid = insert_action(
             requirement_id=req_id,
@@ -182,8 +243,10 @@ def requirement_to_actions(req_id: int, req_body: CreateActionsRequest):
 
     return {"requirement_id": req_id, "created_action_ids": action_ids, "count": len(action_ids)}
 
+
 @app.get("/actions")
 def actions(req_id: int | None = None, status: str | None = None, limit: int = 200):
+    limit = max(1, min(limit, 500))
     return {"items": list_actions(req_id=req_id, status=status, limit=limit)}
 
 

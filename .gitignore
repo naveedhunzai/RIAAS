@@ -38,3 +38,32 @@ backend/*.sqlite
 backend/*.db
 backend/chroma*
 backend/storage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+backend/venv/
+backend/.venv/
+**/__pycache__/
+**/*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Env
+**/.env
+
+# Local data (optional - keep if you don't want demo DB committed)
+backend/vector_db/
+backend/data/*.db
+backend/data/*.sqlite
+
+# Environmental Variables
+.env
+.env.*
+!.env.example
+
+
