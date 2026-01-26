@@ -1,0 +1,40 @@
+# --- Node / Vite ---
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Env / secrets ---
+.env
+.env.*
+*.env
+*.key
+*.pem
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+ENV/
+.env_venv/
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Project data (avoid committing large/sensitive artifacts) ---
+backend/data/
+backend/vector_db/
+backend/*.sqlite
+backend/*.db
+backend/chroma*
+backend/storage/
