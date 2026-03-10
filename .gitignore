@@ -38,3 +38,10 @@ backend/*.sqlite
 backend/*.db
 backend/chroma*
 backend/storage/
+
+*.bak
+*.fix*
+__pycache__/
+node_modules/
+.env
+vector_db/
