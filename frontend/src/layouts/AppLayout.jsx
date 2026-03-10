@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+﻿import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard,
   Upload,
@@ -11,6 +11,7 @@ import {
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/ingest", label: "Ingest", icon: Upload },
+  { to: "/documents", label: "Documents", icon: FileText },
   { to: "/ask", label: "Ask", icon: MessageSquare },
   { to: "/requirements", label: "Requirements", icon: FileText },
   { to: "/actions", label: "Actions", icon: CheckSquare },
@@ -65,3 +66,4 @@ export default function AppLayout() {
     </div>
   );
 }
+

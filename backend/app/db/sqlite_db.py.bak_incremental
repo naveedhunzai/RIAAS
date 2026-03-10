@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Any
@@ -21,11 +21,11 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS requirements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             requirement_text TEXT NOT NULL,
-            modality TEXT,
-            category TEXT,
+            modality TEXT,                 -- MUST/SHALL/PROHIBITED/SHOULD
+            category TEXT,                 -- Reporting/Recordkeeping/Training/etc.
             source TEXT,
             page INTEGER,
-            citation_id INTEGER,
+            citation_id INTEGER,           -- [1], [2] etc from retrieve_context
             created_at TEXT NOT NULL
         )
         """)
@@ -37,8 +37,8 @@ def init_db() -> None:
             action_text TEXT NOT NULL,
             evidence_needed TEXT,
             owner_role TEXT,
-            priority TEXT,
-            status TEXT NOT NULL,
+            priority TEXT,                 -- Low/Medium/High
+            status TEXT NOT NULL,           -- Open/In Progress/Done
             created_at TEXT NOT NULL,
             FOREIGN KEY(requirement_id) REFERENCES requirements(id)
         )
@@ -52,15 +52,10 @@ def init_db() -> None:
             file_hash TEXT NOT NULL UNIQUE,
             last_modified TEXT,
             status TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
             ingested_at TEXT NOT NULL
         )
         """)
 
-        # Safe migration for older DBs that do not yet have is_active
-        existing_cols = [row["name"] for row in cur.execute("PRAGMA table_info(ingested_documents)").fetchall()]
-        if "is_active" not in existing_cols:
-            cur.execute("ALTER TABLE ingested_documents ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
 
         conn.commit()
 
@@ -76,6 +71,7 @@ def insert_requirement(
     with get_conn() as conn:
         cur = conn.cursor()
 
+        # 🔎 Check for duplicate (same text + source + page)
         row = cur.execute("""
             SELECT id FROM requirements
             WHERE requirement_text = ?
@@ -88,8 +84,10 @@ def insert_requirement(
         )).fetchone()
 
         if row:
+            # Duplicate found → return existing ID
             return int(row["id"])
 
+        # ➕ Insert new requirement
         cur.execute("""
             INSERT INTO requirements (
                 requirement_text, modality, category, source, page, citation_id, created_at
@@ -107,7 +105,6 @@ def insert_requirement(
 
         conn.commit()
         return int(cur.lastrowid)
-
 
 def list_requirements(limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
     with get_conn() as conn:
@@ -170,12 +167,10 @@ def list_actions(req_id: Optional[int] = None, status: Optional[str] = None, lim
         rows = conn.execute(q, tuple(params)).fetchall()
         return [dict(r) for r in rows]
 
-
 def update_action_status(action_id: int, status: str) -> None:
     with get_conn() as conn:
         conn.execute("UPDATE actions SET status = ? WHERE id = ?", (status, action_id))
         conn.commit()
-
 
 def is_document_ingested(file_hash: str) -> bool:
     with get_conn() as conn:
@@ -184,18 +179,6 @@ def is_document_ingested(file_hash: str) -> bool:
             (file_hash,)
         ).fetchone()
         return row is not None
-
-
-def get_ingested_document_by_path(file_path: str) -> Optional[dict[str, Any]]:
-    with get_conn() as conn:
-        row = conn.execute("""
-            SELECT *
-            FROM ingested_documents
-            WHERE file_path = ?
-            ORDER BY id DESC
-            LIMIT 1
-        """, (file_path,)).fetchone()
-        return dict(row) if row else None
 
 
 def insert_ingested_document(
@@ -209,9 +192,9 @@ def insert_ingested_document(
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO ingested_documents (
-                file_name, file_path, file_hash, last_modified, status, is_active, ingested_at
+                file_name, file_path, file_hash, last_modified, status, ingested_at
             )
-            VALUES (?, ?, ?, ?, ?, 1, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (
             file_name,
             file_path,
@@ -224,26 +207,6 @@ def insert_ingested_document(
         return int(cur.lastrowid)
 
 
-def mark_document_inactive(file_path: str) -> None:
-    with get_conn() as conn:
-        conn.execute("""
-            UPDATE ingested_documents
-            SET is_active = 0, status = 'missing'
-            WHERE file_path = ?
-        """, (file_path,))
-        conn.commit()
-
-
-def reactivate_document(file_path: str) -> None:
-    with get_conn() as conn:
-        conn.execute("""
-            UPDATE ingested_documents
-            SET is_active = 1, status = 'ingested'
-            WHERE file_path = ?
-        """, (file_path,))
-        conn.commit()
-
-
 def list_ingested_documents(limit: int = 200) -> list[dict[str, Any]]:
     with get_conn() as conn:
         rows = conn.execute("""
@@ -253,3 +216,6 @@ def list_ingested_documents(limit: int = 200) -> list[dict[str, Any]]:
             LIMIT ?
         """, (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+
+

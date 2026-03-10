@@ -1,0 +1,20 @@
+RIAAS next development step
+
+Current system status:
+- Backend FastAPI working
+- Incremental ingestion implemented
+- Vector cleanup implemented
+- SQLite registry working
+- React frontend working
+- Documents page loading
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Next goal: (state what you want)
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Document Intelligence Dashboard
+RAG monitoring panel
+Compliance audit evidence tracking
+Action workflow improvements
+Performance optimization
+Production architecture

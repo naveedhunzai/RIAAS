@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+ï»¿import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 
 /** ---------- small UI helpers ---------- */
@@ -102,14 +102,6 @@ function formatDate(dt) {
   }
 }
 
-function toActionRequirementId(a) {
-  return a?.requirement_id ?? a?.requirementId ?? a?.req_id ?? null;
-}
-
-function hasGeneratedActions(actions, requirementId) {
-  return actions.some((a) => String(toActionRequirementId(a)) === String(requirementId));
-}
-
 /** ---------- details panel ---------- */
 function RequirementDetailsPanel({
   detail,
@@ -124,7 +116,7 @@ function RequirementDetailsPanel({
   }
 
   if (loading) {
-    return <div style={{ opacity: 0.7 }}>Loading requirement details…</div>;
+    return <div style={{ opacity: 0.7 }}>Loading requirement detailsâ€¦</div>;
   }
 
   if (error) {
@@ -172,7 +164,7 @@ function RequirementDetailsPanel({
       >
         <div style={{ fontWeight: 800, marginBottom: 8 }}>Requirement Statement</div>
         <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {requirementText || "—"}
+          {requirementText || "â€”"}
         </div>
       </div>
 
@@ -216,7 +208,6 @@ export default function Requirements() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [requirements, setRequirements] = useState([]);
-  const [actions, setActions] = useState([]);
 
   const [selectedId, setSelectedId] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -296,11 +287,6 @@ export default function Requirements() {
     });
     return ["All", ...Array.from(set).sort()];
   }, [requirements]);
-
-  const selectedHasActions = useMemo(() => {
-    if (selectedId === null || selectedId === undefined) return false;
-    return hasGeneratedActions(actions, selectedId);
-  }, [actions, selectedId]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -536,12 +522,10 @@ export default function Requirements() {
               <tbody>
                 {filtered.map((r, idx) => {
                   const rid = r.__id;
-                  const isSelected = selectedId !== null && String(selectedId) === String(rid);
-                  
-                  const actionExists = hasGeneratedActions(actions, rid);
-                  const shortText = (r.__text || '').trim();
+                  const isSelected = selectedId && String(selectedId) === String(rid);
+                  const shortText = (r.__text || "").trim();
                   const displayText =
-                    shortText.length > 160 ? `${shortText.slice(0, 160)}...` : shortText || "—";
+                    shortText.length > 160 ? `${shortText.slice(0, 160)}...` : shortText || "â€”";
 
                   return (
                     <tr
@@ -559,21 +543,7 @@ export default function Requirements() {
                           verticalAlign: "top",
                         }}
                       >
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "4px 10px",
-                            borderRadius: 999,
-                            border: "1px solid #e5e5e5",
-                            background: actionExists ? "#22c55e" : "#fafafa",
-                            color: actionExists ? "#fff" : "#111",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {rid ?? "—"}
-                        </span>
+                        <Pill>{rid ?? "â€”"}</Pill>
                       </td>
 
                       <td style={{ padding: "10px 12px", borderBottom: "1px solid #f6f6f6" }}>
@@ -583,7 +553,7 @@ export default function Requirements() {
                         {(r.source || r.page) && (
                           <div style={{ opacity: 0.7, fontSize: 12 }}>
                             {r.source ? `Source: ${r.source}` : ""}
-                            {r.source && r.page ? " • " : ""}
+                            {r.source && r.page ? " â€¢ " : ""}
                             {r.page ? `Page: ${r.page}` : ""}
                           </div>
                         )}
@@ -655,6 +625,3 @@ export default function Requirements() {
     </div>
   );
 }
-
-
-

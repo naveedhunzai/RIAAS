@@ -145,11 +145,13 @@ def ingest():
     chunks = chunk_documents(docs, chunk_size=800, overlap=150)
     embeddings = embed_chunks(chunks)
 
+    
     collection = get_collection()
 
     # Remove vectors for changed files
     for fname in changed_files:
         delete_by_source(collection, fname)
+ collection = get_collection()
     upsert_chunks(collection, chunks, embeddings)
 
     for pdf_path in new_files:
@@ -312,7 +314,4 @@ def set_action_status(action_id: int, body: UpdateActionStatusRequest):
 
     update_action_status(action_id, s)
     return {"action_id": action_id, "status": s}
-
-
-
 

@@ -1,24 +1,34 @@
-from pathlib import Path
-import chromadb
-from chromadb.config import Settings
+﻿from chromadb import PersistentClient
+from backend.app.config import VECTOR_DB_DIR
 
-from app.config import VECTOR_DB_DIR
+def get_collection():
+    client = PersistentClient(path=str(VECTOR_DB_DIR))
+    return client.get_or_create_collection("riaas_documents")
 
-def get_collection(name: str = "riaas_docs"):
-    db_path = str(Path(VECTOR_DB_DIR))
-    client = chromadb.PersistentClient(path=db_path, settings=Settings(anonymized_telemetry=False))
+def upsert_chunks(collection, chunks, embeddings):
+    ids = []
+    docs = []
+    metas = []
 
-    # get_or_create_collection is safer when you rerun
-    return client.get_or_create_collection(name=name)
-
-def upsert_chunks(collection, chunks: list[dict], embeddings):
-    ids = [f"{c['source']}::p{c['page']}::i{i}" for i, c in enumerate(chunks)]
-    documents = [c["text"] for c in chunks]
-    metadatas = [{"source": c["source"], "page": c["page"]} for c in chunks]
+    for i, chunk in enumerate(chunks):
+        ids.append(f"{chunk['source']}_{chunk['page']}_{i}")
+        docs.append(chunk["text"])
+        metas.append({
+            "source": chunk["source"],
+            "page": chunk["page"]
+        })
 
     collection.upsert(
         ids=ids,
-        documents=documents,
-        metadatas=metadatas,
-        embeddings=embeddings.tolist() if hasattr(embeddings, "tolist") else embeddings
+        documents=docs,
+        embeddings=embeddings,
+        metadatas=metas
     )
+
+def delete_by_source(collection, source_name):
+    results = collection.get(
+        where={"source": source_name}
+    )
+
+    if results and results.get("ids"):
+        collection.delete(ids=results["ids"])

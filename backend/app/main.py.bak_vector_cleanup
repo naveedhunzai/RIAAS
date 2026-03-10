@@ -27,7 +27,6 @@ from backend.app.ingest.loader import load_pdf_files
 from backend.app.ingest.chunker import chunk_documents
 from backend.app.ingest.embedder import embed_chunks
 from backend.app.rag.retriever import get_collection, upsert_chunks
-from backend.app.rag.retriever import delete_by_source
 from backend.app.rag.qa import retrieve_clean
 
 app = FastAPI(title="RIAAS Backend", version="0.1.0")
@@ -146,10 +145,6 @@ def ingest():
     embeddings = embed_chunks(chunks)
 
     collection = get_collection()
-
-    # Remove vectors for changed files
-    for fname in changed_files:
-        delete_by_source(collection, fname)
     upsert_chunks(collection, chunks, embeddings)
 
     for pdf_path in new_files:
@@ -312,7 +307,3 @@ def set_action_status(action_id: int, body: UpdateActionStatusRequest):
 
     update_action_status(action_id, s)
     return {"action_id": action_id, "status": s}
-
-
-
-

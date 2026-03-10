@@ -1,10 +1,13 @@
 ﻿from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from .rag.qa import retrieve_context
-from pathlib import Path
-import hashlib
+
+from backend.app.core.validate_env import validate_settings
+from backend.app.core.config import settings
+
+from backend.app.rag.qa import retrieve_context, retrieve_clean
 from backend.app.rag.ollama_client import ollama_generate
+from backend.app.rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
+
 from backend.app.db.sqlite_db import (
     init_db,
     insert_requirement,
@@ -13,24 +16,27 @@ from backend.app.db.sqlite_db import (
     insert_action,
     list_actions,
     update_action_status,
-    is_document_ingested,
-    insert_ingested_document,
-    list_ingested_documents,
-    get_ingested_document_by_path,
-    mark_document_inactive,
-    reactivate_document,
 )
-from backend.app.rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
 
 from backend.app.config import RAW_DOCS_DIR
-from backend.app.ingest.loader import load_pdf_files
+from backend.app.ingest.loader import load_pdfs
 from backend.app.ingest.chunker import chunk_documents
 from backend.app.ingest.embedder import embed_chunks
 from backend.app.rag.retriever import get_collection, upsert_chunks
-from backend.app.rag.retriever import delete_by_source
-from backend.app.rag.qa import retrieve_clean
 
-app = FastAPI(title="RIAAS Backend", version="0.1.0")
+
+# -------------------------
+# App init
+# -------------------------
+validate_settings()
+
+app = FastAPI(
+    title="RIAAS Backend",
+    version="0.1.0",
+    debug=(settings.APP_ENV == "dev"),
+)
+
+from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,9 +48,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-init_db()
+
+# Run DB init on startup (reload-safe)
+@app.on_event("startup")
+def _startup():
+    init_db()
 
 
+# -------------------------
+# Schemas
+# -------------------------
 class IngestResponse(BaseModel):
     loaded_pages: int
     total_chunks: int
@@ -73,119 +86,80 @@ class CreateActionsRequest(BaseModel):
 
 
 class UpdateActionStatusRequest(BaseModel):
-    status: str
+    status: str  # Open / In Progress / Done
 
 
-def compute_file_hash(file_path: Path) -> str:
-    hasher = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while chunk := f.read(8192):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
-@app.post("/ingest")
+# -------------------------
+# Endpoints
+# -------------------------
+@app.post("/ingest", response_model=IngestResponse)
 def ingest():
-    folder = Path(RAW_DOCS_DIR)
-    pdf_files = list(folder.glob("*.pdf"))
-
-    if not pdf_files:
-        raise HTTPException(
-            status_code=400,
-            detail="No PDFs found in backend/data/raw_docs/"
-        )
-
-    current_paths = {str(p) for p in pdf_files}
-    tracked_docs = list_ingested_documents(limit=5000)
-
-    missing_files = []
-    for doc in tracked_docs:
-        tracked_path = doc["file_path"]
-        if doc.get("is_active", 1) == 1 and tracked_path not in current_paths:
-            mark_document_inactive(tracked_path)
-            missing_files.append(tracked_path)
-
-    new_files = []
-    skipped_files = []
-    changed_files = []
-
-    for pdf_path in pdf_files:
-        file_hash = compute_file_hash(pdf_path)
-        existing = get_ingested_document_by_path(str(pdf_path))
-
-        if existing is None:
-            new_files.append(pdf_path)
-            continue
-
-        if existing["file_hash"] == file_hash:
-            reactivate_document(str(pdf_path))
-            skipped_files.append(pdf_path.name)
-        else:
-            new_files.append(pdf_path)
-            changed_files.append(pdf_path.name)
-
-    if not new_files:
-        return {
-            "message": "No new or changed PDFs found. Existing indexed files were skipped.",
-            "loaded_pages": 0,
-            "total_chunks": 0,
-            "new_files": [],
-            "changed_files": changed_files,
-            "skipped_files": skipped_files,
-            "missing_files": missing_files,
-        }
-
-    docs = load_pdf_files(new_files)
+    docs = load_pdfs(RAW_DOCS_DIR)
     if not docs:
         raise HTTPException(
             status_code=400,
-            detail="No readable PDF text found in new or changed files."
+            detail="No PDF text loaded. Put PDFs in backend/data/raw_docs/",
         )
 
     chunks = chunk_documents(docs, chunk_size=800, overlap=150)
     embeddings = embed_chunks(chunks)
 
     collection = get_collection()
-
-    # Remove vectors for changed files
-    for fname in changed_files:
-        delete_by_source(collection, fname)
     upsert_chunks(collection, chunks, embeddings)
 
-    for pdf_path in new_files:
-        insert_ingested_document(
-            file_name=pdf_path.name,
-            file_path=str(pdf_path),
-            file_hash=compute_file_hash(pdf_path),
-            last_modified=str(pdf_path.stat().st_mtime),
-        )
-
-    return {
-        "message": "Incremental ingestion completed.",
-        "loaded_pages": len(docs),
-        "total_chunks": len(chunks),
-        "new_files": [p.name for p in new_files if p.name not in changed_files],
-        "changed_files": changed_files,
-        "skipped_files": skipped_files,
-        "missing_files": missing_files,
-    }
+    return IngestResponse(loaded_pages=len(docs), total_chunks=len(chunks))
 
 
-@app.get("/ingested-documents")
-def ingested_documents(limit: int = 200):
-    return {"items": list_ingested_documents(limit=limit)}
-
-
-@app.get("/ask")
+@app.get("/ask", response_model=AskResponse)
 def ask(question: str, top_k: int = 5):
-    if not question.strip():
+    q = (question or "").strip()
+    if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    return {
-        "question": question,
-        "top_k": top_k,
-        "results": retrieve_clean(question, top_k=top_k)
-    }
+    top_k = max(1, min(top_k, 20))
+
+    return AskResponse(
+        question=q,
+        top_k=top_k,
+        results=retrieve_clean(q, top_k=top_k),
+    )
+
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from app.auth.rbac import init_auth_db, authenticate, create_access_token
+from app.auth.deps import get_current_user, require_roles
+
+app = FastAPI()
+
+# Ensure auth tables exist on startup
+@app.on_event("startup")
+def _startup():
+    init_auth_db()
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/auth/login")
+def login(body: LoginRequest):
+    u = authenticate(body.email, body.password)
+    if not u:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token(sub=u["email"], roles=u["roles"])
+    return {"access_token": token, "token_type": "bearer", "roles": u["roles"], "email": u["email"]}
+
+
+@app.get("/auth/me")
+def me(user=Depends(get_current_user)):
+    return user
+
+
+# Example: lock down admin-only endpoint
+@app.get("/admin/ping")
+def admin_ping(user=Depends(require_roles("admin"))):
+    return {"ok": True, "as": user["email"]}
 
 
 @app.post("/answer")
@@ -194,7 +168,9 @@ def answer(req: AnswerRequest):
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    contexts, citations = retrieve_context(q, top_k=req.top_k)
+    top_k = max(1, min(req.top_k, 20))
+
+    contexts, citations = retrieve_context(q, top_k=top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -217,10 +193,10 @@ def answer(req: AnswerRequest):
     return {
         "question": q,
         "model": req.model,
-        "top_k": req.top_k,
+        "top_k": top_k,
         "answer": response_text,
         "citations": citations,
-        "sources": sources
+        "sources": sources,
     }
 
 
@@ -230,15 +206,20 @@ def extract_requirements(req: ExtractRequirementsRequest):
     if not topic:
         raise HTTPException(status_code=400, detail="topic cannot be empty")
 
-    contexts, citations = retrieve_context(topic, top_k=req.top_k)
+    top_k = max(1, min(req.top_k, 30))
+
+    # Retrieve context from vector DB
+    contexts, citations = retrieve_context(topic, top_k=top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
+    # LLM extraction
     extracted = extract_requirements_from_context(topic, contexts, model=req.model)
 
+    # Map citation_id -> (source,page)
     cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
 
-    saved_ids = []
+    saved_ids: list[int] = []
     for r in extracted:
         cid = r.get("citation_id")
         source, page = (None, None)
@@ -259,12 +240,14 @@ def extract_requirements(req: ExtractRequirementsRequest):
         "topic": topic,
         "retrieved_citations": citations,
         "extracted_count": len(extracted),
-        "saved_requirement_ids": saved_ids
+        "saved_requirement_ids": saved_ids,
     }
 
 
 @app.get("/requirements")
 def requirements(limit: int = 100, offset: int = 0):
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
     return {"items": list_requirements(limit=limit, offset=offset)}
 
 
@@ -284,7 +267,7 @@ def requirement_to_actions(req_id: int, req_body: CreateActionsRequest):
 
     actions = extract_actions_for_requirement(r["requirement_text"], model=req_body.model)
 
-    action_ids = []
+    action_ids: list[int] = []
     for a in actions:
         aid = insert_action(
             requirement_id=req_id,
@@ -300,6 +283,7 @@ def requirement_to_actions(req_id: int, req_body: CreateActionsRequest):
 
 @app.get("/actions")
 def actions(req_id: int | None = None, status: str | None = None, limit: int = 200):
+    limit = max(1, min(limit, 500))
     return {"items": list_actions(req_id=req_id, status=status, limit=limit)}
 
 
@@ -312,7 +296,3 @@ def set_action_status(action_id: int, body: UpdateActionStatusRequest):
 
     update_action_status(action_id, s)
     return {"action_id": action_id, "status": s}
-
-
-
-

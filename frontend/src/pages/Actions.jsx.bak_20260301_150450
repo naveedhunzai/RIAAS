@@ -1,0 +1,295 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+/* TEMP RBAC — replace later with real auth */
+function getRole() {
+  return (localStorage.getItem("role") || "viewer").toLowerCase();
+}
+function canEdit(role) {
+  return ["admin", "editor", "manager"].includes(role);
+}
+
+/* API */
+async function listActions({ q = "", status = "" } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.append("q", q);
+  if (status) params.append("status", status);
+
+  const qs = params.toString();
+  const url = API_BASE + "/actions" + (qs ? "?" + qs : "");
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to load actions");
+  return res.json();
+}
+
+async function updateAction(id, payload) {
+  const res = await fetch(API_BASE + "/actions/" + id, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Update failed");
+  return res.json();
+}
+
+function normalize(a) {
+  const rawSubject =
+    a.subject ??
+    a.title ??
+    a.heading ??
+    a.name ??
+    a.summary ??
+    a.action ??          // common backend field
+    a.action_item ??     // common backend field
+    a.description ??     // fallback
+    a.details ??         // fallback
+    "";
+
+  const subject =
+    String(rawSubject).trim() ||
+    (a.req_id || a.requirement_id ? `Action for Req ${a.req_id ?? a.requirement_id}` : "Untitled Action");
+
+  return {
+    id: a.id ?? a.action_id,
+    reqId: a.req_id ?? a.requirement_id,
+    subject,
+    status: a.status ?? a.state ?? "Open",
+    owner: a.owner ?? a.assignee ?? "",
+    due: a.due_date ?? a.due ?? "",
+  };
+}
+
+export default function Actions() {
+  const navigate = useNavigate();
+  const { actionId } = useParams();
+  const [searchParams] = useSearchParams();
+
+  // Supports deep-linking from Requirements:
+  //   /actions?req_id=123         (auto-select first action for that requirement)
+  //   /actions?action_id=555      (auto-select that action)
+  const actionIdFromUrl = searchParams.get("action_id");
+  const reqIdFromUrl = searchParams.get("req_id");
+
+  const role = getRole();
+  const editable = canEdit(role);
+
+  const [actions, setActions] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+
+  const [subject, setSubject] = useState("");
+  const [status, setStatus] = useState("Open");
+  const [owner, setOwner] = useState("");
+  const [due, setDue] = useState("");
+
+  const rows = useMemo(() => actions.map(normalize), [actions]);
+
+  // If coming from Requirements, optionally show only actions for that requirement.
+  const visibleRows = useMemo(() => {
+    if (!reqIdFromUrl) return rows;
+    return rows.filter(r => String(r.reqId) === String(reqIdFromUrl));
+  }, [rows, reqIdFromUrl]);
+
+  const selected = useMemo(() => {
+    const idCandidate = selectedId || actionId || actionIdFromUrl;
+    if (!idCandidate) return null;
+    return rows.find(r => String(r.id) === String(idCandidate)) || null;
+  }, [rows, selectedId, actionId, actionIdFromUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const data = await listActions();
+        const items = Array.isArray(data) ? data : data.items || [];
+        if (cancelled) return;
+
+        setActions(items);
+
+        // Priority 1: explicit action id (route param or query param)
+        const explicitActionId = actionId || actionIdFromUrl;
+        if (explicitActionId) {
+          setSelectedId(explicitActionId);
+          return;
+        }
+
+        // Priority 2: coming from requirement id query param
+        if (reqIdFromUrl) {
+          const norm = items.map(normalize);
+          const found = norm.find(a => String(a.reqId) === String(reqIdFromUrl));
+          if (found) {
+            setSelectedId(found.id);
+            // Update the URL to the selected action for nice deep-linking.
+            navigate("/actions?action_id=" + found.id, { replace: true });
+            return;
+          }
+        }
+
+        // Priority 3: fallback to first item
+        if (items.length) setSelectedId(items[0].id ?? items[0].action_id);
+      } catch (err) {
+        console.error("Failed to load actions", err);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [actionId, actionIdFromUrl, reqIdFromUrl, navigate]);
+
+  useEffect(() => {
+    if (!selected) return;
+    setSubject(selected.subject);
+    setStatus(selected.status);
+    setOwner(selected.owner);
+    setDue(selected.due);
+  }, [selected?.id]);
+
+  function openAction(id) {
+    setSelectedId(id);
+    navigate("/actions?action_id=" + id);
+  }
+
+  async function save() {
+    if (!editable || !selected) return;
+    try {
+      const updatedAction = await updateAction(selected.id, {
+        subject,
+        title: subject,
+        status,
+        owner,
+        due_date: due,
+      });
+
+      // Keep list in sync (minimal optimistic refresh)
+      setActions(prev =>
+        prev.map(a => {
+          const aId = a.id ?? a.action_id;
+          if (String(aId) !== String(selected.id)) return a;
+          return { ...a, ...updatedAction };
+        })
+      );
+    } catch (err) {
+      console.error("Failed to save action", err);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+      {/* LIST */}
+      <div>
+        <h2>Actions</h2>
+
+        {reqIdFromUrl && (
+          <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.8 }}>
+            Showing actions for Requirement ID: <b>{reqIdFromUrl}</b>
+            <button
+              style={{ marginLeft: 10 }}
+              onClick={() => navigate("/actions")}
+              title="Show all actions"
+            >
+              Clear filter
+            </button>
+          </div>
+        )}
+
+        {visibleRows.map(a => (
+          <div
+            key={a.id}
+            onClick={() => openAction(a.id)}
+            style={{
+              padding: 10,
+              borderBottom: "1px solid #eee",
+              cursor: "pointer",
+              background: String(a.id) === String(selected?.id) ? "#f6f6f6" : "transparent",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <b>{a.subject}</b>
+              <div style={{ fontSize: 12 }}>{a.status}</div>
+            </div>
+            <button
+              onClick={e => {
+                e.stopPropagation();
+                openAction(a.id);
+              }}
+            >
+              Open
+            </button>
+          </div>
+        ))}
+
+        {!visibleRows.length && (
+          <div style={{ padding: 10, opacity: 0.7 }}>
+            No actions found{reqIdFromUrl ? " for this requirement." : "."}
+          </div>
+        )}
+      </div>
+
+      {/* DETAIL */}
+      <div style={{ border: "1px solid #eee", padding: 12 }}>
+        {!selected ? (
+          <div>Select an action</div>
+        ) : (
+          <>
+            <label>Subject</label>
+            <input
+              value={subject}
+              onChange={e => setSubject(e.target.value)}
+              disabled={!editable}
+            />
+
+            <label>Status</label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value)}
+              disabled={!editable}
+            >
+              <option>Open</option>
+              <option>In Progress</option>
+              <option>Blocked</option>
+              <option>Done</option>
+            </select>
+
+            <label>Owner</label>
+            <input
+              value={owner}
+              onChange={e => setOwner(e.target.value)}
+              disabled={!editable}
+            />
+
+            <label>Due</label>
+            <input
+              type="date"
+              value={due}
+              onChange={e => setDue(e.target.value)}
+              disabled={!editable}
+            />
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={save} disabled={!editable}>
+                Save
+              </button>
+
+              {selected.reqId && (
+                <button
+                  onClick={() => navigate("/requirements?req_id=" + selected.reqId)}
+                >
+                  Open Requirement
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+

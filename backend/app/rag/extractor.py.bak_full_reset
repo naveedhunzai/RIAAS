@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 from typing import Any
 
@@ -110,44 +110,30 @@ def normalize_category(c: str | None) -> str:
 def extract_requirements_from_context(question: str, contexts: list[str], model: str = "gemma3:1b") -> list[dict]:
     prompt = (
         "You extract compliance REQUIREMENTS from regulatory text.\n"
-        "Return ONLY valid JSON as a single JSON array. No markdown. No commentary.\n\n"
-        "Rules:\n"
-        "- Return up to 25 objects.\n"
-        "- Each requirement_text must be one short complete sentence.\n"
-        "- Extract ONLY explicit obligations or prohibitions.\n"
-        "- modality must be one of: MUST, SHALL, PROHIBITED, SHOULD.\n"
-        "- category must be one of: Reporting, Recordkeeping, Training, Monitoring, Governance, Other.\n"
-        "- citation_id must match the source block number.\n\n"
+        "Return ONLY valid JSON as a single JSON array. No markdown. No code fences. No commentary.\n\n"
+        "Strict rules:\n"
+        "- Return at most 8 objects.\n"
+        "- Each requirement_text must be one short complete sentence on a single line.\n"
+        "- Do NOT include newline tab or carriage return characters inside any JSON value.\n"
+        "- Do NOT truncate any sentence.\n"
+        "- If unsure omit the item.\n"
+        "- Extract ONLY explicit obligations or prohibitions supported by the source text.\n"
+        "- modality must be exactly one of: MUST, SHALL, PROHIBITED, SHOULD.\n"
+        "- category must be exactly one of: Reporting, Recordkeeping, Training, Monitoring, Governance, Other.\n"
+        "- citation_id must match the source block number where it came from.\n\n"
         "JSON schema:\n"
         "[\n"
-        "  {\"requirement_text\":\"Sentence.\",\"modality\":\"MUST\",\"category\":\"Governance\",\"citation_id\":1}\n"
+        "  {\"requirement_text\":\"One short single-line sentence.\",\"modality\":\"MUST\",\"category\":\"Governance\",\"citation_id\":1}\n"
         "]\n\n"
-        f"QUESTION:\n{question}\n\n"
+        f"QUESTION/TOPIC:\n{question}\n\n"
         "SOURCES:\n" + "\n\n".join(contexts) + "\n\n"
         "JSON:"
     )
 
     raw = ollama_generate(prompt, model=model)
-
-    print("\n=== RAW REQUIREMENT EXTRACTION OUTPUT START ===")
-    print(raw)
-    print("=== RAW REQUIREMENT EXTRACTION OUTPUT END ===\n")
-
-    try:
-        data = _extract_json(raw)
-    except Exception as e:
-        print("\n=== REQUIREMENT EXTRACTION PARSE ERROR START ===")
-        print(str(e))
-        print("=== REQUIREMENT EXTRACTION PARSE ERROR END ===\n")
-        return []
-
-    print("\n=== PARSED REQUIREMENTS START ===")
-    print(data)
-    print("=== PARSED REQUIREMENTS END ===\n")
+    data = _extract_json(raw)
 
     cleaned: list[dict] = []
-    seen_texts: set[str] = set()
-
     for item in data:
         if not isinstance(item, dict):
             continue
@@ -155,11 +141,6 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         rt = " ".join(str(item.get("requirement_text") or "").split()).strip()
         if not rt:
             continue
-
-        key = rt.lower()
-        if key in seen_texts:
-            continue
-        seen_texts.add(key)
 
         cid = item.get("citation_id")
         try:
@@ -173,9 +154,6 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
             "category": normalize_category(item.get("category")),
             "citation_id": cid,
         })
-
-    print("\n=== CLEANED REQUIREMENTS ===")
-    print(cleaned)
 
     return cleaned
 
@@ -200,25 +178,9 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
     )
 
     raw = ollama_generate(prompt, model=model)
-
-    print("\n=== RAW ACTION EXTRACTION OUTPUT START ===")
-    print(raw)
-    print("=== RAW ACTION EXTRACTION OUTPUT END ===\n")
-
-    try:
-        data = _extract_json(raw)
-    except Exception as e:
-        print("\n=== ACTION EXTRACTION PARSE ERROR START ===")
-        print(str(e))
-        print("=== ACTION EXTRACTION PARSE ERROR END ===\n")
-        return []
-
-    print("\n=== PARSED ACTIONS START ===")
-    print(data)
-    print("=== PARSED ACTIONS END ===\n")
+    data = _extract_json(raw)
 
     cleaned: list[dict] = []
-
     for item in data:
         if not isinstance(item, dict):
             continue

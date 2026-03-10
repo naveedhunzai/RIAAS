@@ -1,8 +1,8 @@
-import React from "react";
+﻿import React from "react";
 import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import "./index.css";
-
+import Documents from "./pages/Documents";
 import AppLayout from "./layouts/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import Ingest from "./pages/Ingest";
@@ -21,6 +21,7 @@ const router = createBrowserRouter([
       { path: "ask", element: <Ask /> },
       { path: "requirements", element: <Requirements /> },
       { path: "actions", element: <Actions /> },
+      { path: "documents", element: <Documents /> },
       { path: "settings", element: <Settings /> },
     ],
   },
@@ -31,3 +32,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <RouterProvider router={router} />
   </React.StrictMode>
 );
+
