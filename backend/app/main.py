@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from .rag.qa import retrieve_context
@@ -244,6 +244,9 @@ def extract_requirements(req: ExtractRequirementsRequest):
         source, page = (None, None)
         if cid in cite_map:
             source, page = cite_map[cid]
+        elif citations:
+            source = citations[0].get("source")
+            page = citations[0].get("page")
 
         new_id = insert_requirement(
             requirement_text=r["requirement_text"],
@@ -312,6 +315,7 @@ def set_action_status(action_id: int, body: UpdateActionStatusRequest):
 
     update_action_status(action_id, s)
     return {"action_id": action_id, "status": s}
+
 
 
 
