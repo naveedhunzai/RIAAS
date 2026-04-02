@@ -22,38 +22,15 @@ function statusTone(status) {
   return { color: "#991b1b", bg: "#fef2f2", border: "#fecaca" };
 }
 
-function ActionButton({ children, onClick, disabled }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        padding: "6px 10px",
-        borderRadius: 8,
-        border: "1px solid #bfdbfe",
-        background: disabled ? "#e5e7eb" : "#eff6ff",
-        color: disabled ? "#6b7280" : "#1d4ed8",
-        cursor: disabled ? "not-allowed" : "pointer",
-        fontWeight: 600
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
 export default function Documents() {
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [workingKey, setWorkingKey] = useState("");
 
   async function loadDocs() {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
 
       const response = await fetch("http://127.0.0.1:8000/document-lifecycle");
       if (!response.ok) {
@@ -69,52 +46,6 @@ export default function Documents() {
     }
   }
 
-  async function reprocessDocument(doc) {
-    const ok = window.confirm(
-      `Reprocess "${doc.file_name}"? Backend will handle cleanup, validation, missing requirements, and recovery as needed.`
-    );
-    if (!ok) return;
-
-    try {
-      setWorkingKey(`reprocess-${doc.id}`);
-      setError("");
-      setMessage("");
-
-      const response = await fetch(`http://127.0.0.1:8000/reingest-document/${doc.id}`, {
-        method: "POST"
-      });
-
-      if (!response.ok) {
-        let msg = "Failed to reprocess document.";
-        try {
-          const data = await response.json();
-          msg = data?.detail || data?.message || msg;
-        } catch {}
-        throw new Error(msg);
-      }
-
-      const res = await response.json();
-
-      const stepSummary = res?.steps
-        ? Object.entries(res.steps).map(([k, v]) => `${k}: ${v}`).join(" | ")
-        : "No step summary returned.";
-
-      const errorSummary = Array.isArray(res?.errors) && res.errors.length > 0
-        ? ` Errors: ${res.errors.join(" ; ")}`
-        : "";
-
-      setMessage(
-        `Reprocess status: ${res?.status || "unknown"} for ${doc.file_name}. ${stepSummary}.${errorSummary}`
-      );
-
-      await loadDocs();
-    } catch (err) {
-      setError(err.message || "Failed to reprocess document.");
-    } finally {
-      setWorkingKey("");
-    }
-  }
-
   useEffect(() => {
     loadDocs();
   }, []);
@@ -124,7 +55,7 @@ export default function Documents() {
       <h2>Document Lifecycle</h2>
 
       <p style={{ opacity: 0.7 }}>
-        This page validates document-to-requirement traceability and lets the backend handle document reprocessing.
+        This page validates document-to-requirement traceability and shows allowed operations by status.
       </p>
 
       <button
@@ -143,21 +74,6 @@ export default function Documents() {
       >
         {loading ? "Refreshing..." : "Refresh"}
       </button>
-
-      {message && (
-        <div
-          style={{
-            color: "#065f46",
-            background: "#ecfdf5",
-            border: "1px solid #a7f3d0",
-            borderRadius: 10,
-            padding: 12,
-            whiteSpace: "pre-wrap"
-          }}
-        >
-          {message}
-        </div>
-      )}
 
       {loading && <div>Loading document lifecycle...</div>}
 
@@ -187,7 +103,7 @@ export default function Documents() {
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Requirements</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Actions</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Status</th>
-                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Operation</th>
+                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Allowed Operations</th>
               </tr>
             </thead>
             <tbody>
@@ -204,14 +120,11 @@ export default function Documents() {
                     ? `orphan-${doc.source || idx}`
                     : `doc-${doc.id}`;
 
-                  const isOrphan = doc.type === "orphan";
-                  const canReprocess = !isOrphan && !!doc.id;
-
                   return (
                     <tr key={rowKey}>
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top", fontWeight: 600 }}>
                         {doc.file_name}
-                        {isOrphan && doc.source ? (
+                        {doc.type === "orphan" && doc.source ? (
                           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
                             Source: {doc.source}
                           </div>
@@ -219,15 +132,7 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        {doc.ingested_at
-                          ? new Date(doc.ingested_at).toLocaleString("en-US", {
-                              year: "numeric",
-                              month: "short",
-                              day: "2-digit",
-                              hour: "numeric",
-                              minute: "2-digit"
-                            })
-                          : "—"}
+                        {doc.ingested_at || "—"}
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
@@ -264,16 +169,7 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        {canReprocess ? (
-                          <ActionButton
-                            onClick={() => reprocessDocument(doc)}
-                            disabled={workingKey === `reprocess-${doc.id}`}
-                          >
-                            {workingKey === `reprocess-${doc.id}` ? "Reprocessing..." : "Reprocess Document"}
-                          </ActionButton>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "#6b7280" }}>—</span>
-                        )}
+                        {(doc.allowed_operations || []).join(", ")}
                       </td>
                     </tr>
                   );
@@ -286,4 +182,3 @@ export default function Documents() {
     </div>
   );
 }
-

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "../api/client";
 
 function statusTone(status) {
   const s = String(status || "").toLowerCase();
@@ -22,7 +23,27 @@ function statusTone(status) {
   return { color: "#991b1b", bg: "#fef2f2", border: "#fecaca" };
 }
 
-function ActionButton({ children, onClick, disabled }) {
+function ActionButton({ children, onClick, disabled, tone = "neutral" }) {
+  const themes = {
+    neutral: {
+      border: "#d1d5db",
+      bg: "#ffffff",
+      color: "#111827"
+    },
+    primary: {
+      border: "#bfdbfe",
+      bg: "#eff6ff",
+      color: "#1d4ed8"
+    },
+    danger: {
+      border: "#fecaca",
+      bg: "#fee2e2",
+      color: "#991b1b"
+    }
+  };
+
+  const t = themes[tone] || themes.neutral;
+
   return (
     <button
       onClick={onClick}
@@ -30,9 +51,9 @@ function ActionButton({ children, onClick, disabled }) {
       style={{
         padding: "6px 10px",
         borderRadius: 8,
-        border: "1px solid #bfdbfe",
-        background: disabled ? "#e5e7eb" : "#eff6ff",
-        color: disabled ? "#6b7280" : "#1d4ed8",
+        border: `1px solid ${t.border}`,
+        background: disabled ? "#e5e7eb" : t.bg,
+        color: disabled ? "#6b7280" : t.color,
         cursor: disabled ? "not-allowed" : "pointer",
         fontWeight: 600
       }}
@@ -49,29 +70,70 @@ export default function Documents() {
   const [message, setMessage] = useState("");
   const [workingKey, setWorkingKey] = useState("");
 
-  async function loadDocs() {
+  function formatDate(dt) {
+  if (!dt) return "—";
+
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return String(dt);
+
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+  async function extractRequirements(doc) {
+    const ok = window.confirm(
+      `Extract requirements for "${doc.file_name}" from existing indexed content?`
+    );
+    if (!ok) return;
+
     try {
-      setLoading(true);
+      setWorkingKey(`extract-${doc.id}`);
       setError("");
       setMessage("");
 
-      const response = await fetch("http://127.0.0.1:8000/document-lifecycle");
+      const response = await fetch("http://127.0.0.1:8000/extract-requirements", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          topic: `all compliance requirements from ${doc.file_name}`,
+          top_k: 50,
+          model: "gemma3:4b"
+        })
+      });
+
       if (!response.ok) {
-        throw new Error("Failed to load document lifecycle.");
+        let msg = "Failed to extract requirements.";
+        try {
+          const data = await response.json();
+          msg = data?.detail || data?.message || msg;
+        } catch {}
+        throw new Error(msg);
       }
 
-      const data = await response.json();
-      setDocs(data.items || []);
+      const res = await response.json();
+      setMessage(
+        `Requirement extraction completed for ${doc.file_name}. Extracted: ${res?.extracted_count ?? 0}. Saved IDs: ${(res?.saved_requirement_ids || []).join(", ") || "none"}.`
+      );
+
+      await loadDocs();
     } catch (err) {
-      setError(err.message || "Failed to load document lifecycle.");
+      setError(err.message || "Failed to extract requirements.");
     } finally {
-      setLoading(false);
+      setWorkingKey("");
     }
   }
 
   async function reprocessDocument(doc) {
     const ok = window.confirm(
-      `Reprocess "${doc.file_name}"? Backend will handle cleanup, validation, missing requirements, and recovery as needed.`
+      `Reprocess "${doc.file_name}"? This will clear related requirements, actions, vectors, and the document DB row, then run the full ingest pipeline again using the existing file on disk.`
     );
     if (!ok) return;
 
@@ -94,22 +156,38 @@ export default function Documents() {
       }
 
       const res = await response.json();
-
-      const stepSummary = res?.steps
-        ? Object.entries(res.steps).map(([k, v]) => `${k}: ${v}`).join(" | ")
-        : "No step summary returned.";
-
-      const errorSummary = Array.isArray(res?.errors) && res.errors.length > 0
-        ? ` Errors: ${res.errors.join(" ; ")}`
-        : "";
-
       setMessage(
-        `Reprocess status: ${res?.status || "unknown"} for ${doc.file_name}. ${stepSummary}.${errorSummary}`
+        `Reprocess completed for ${doc.file_name}. Requirements cleared: ${res?.deleted_requirements ?? 0}. Actions cleared: ${res?.deleted_actions ?? 0}. Vectors cleared: ${res?.deleted_vectors ?? 0}.`
       );
 
       await loadDocs();
     } catch (err) {
       setError(err.message || "Failed to reprocess document.");
+    } finally {
+      setWorkingKey("");
+    }
+  }
+
+  async function deleteDocument(doc) {
+    const ok = window.confirm(
+      `Delete "${doc.file_name}" and all related requirements, actions, vectors, and stored file data?`
+    );
+    if (!ok) return;
+
+    try {
+      setWorkingKey(`delete-${doc.id}`);
+      setError("");
+      setMessage("");
+
+      const res = await api.del(`/ingested-documents/${doc.id}`);
+
+      setMessage(
+        `Deleted ${doc.file_name}. Requirements removed: ${res?.deleted_requirements ?? 0}. Actions removed: ${res?.deleted_actions ?? 0}. Vector entries removed: ${res?.deleted_vectors ?? 0}.`
+      );
+
+      await loadDocs();
+    } catch (err) {
+      setError(err.message || "Failed to delete document.");
     } finally {
       setWorkingKey("");
     }
@@ -124,7 +202,7 @@ export default function Documents() {
       <h2>Document Lifecycle</h2>
 
       <p style={{ opacity: 0.7 }}>
-        This page validates document-to-requirement traceability and lets the backend handle document reprocessing.
+        This page validates document-to-requirement traceability and shows allowed operations by status.
       </p>
 
       <button
@@ -187,7 +265,7 @@ export default function Documents() {
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Requirements</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Actions</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Status</th>
-                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Operation</th>
+                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Operations</th>
               </tr>
             </thead>
             <tbody>
@@ -204,14 +282,14 @@ export default function Documents() {
                     ? `orphan-${doc.source || idx}`
                     : `doc-${doc.id}`;
 
+                  const ops = doc.allowed_operations || [];
                   const isOrphan = doc.type === "orphan";
-                  const canReprocess = !isOrphan && !!doc.id;
 
                   return (
                     <tr key={rowKey}>
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top", fontWeight: 600 }}>
                         {doc.file_name}
-                        {isOrphan && doc.source ? (
+                        {doc.type === "orphan" && doc.source ? (
                           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
                             Source: {doc.source}
                           </div>
@@ -219,15 +297,7 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        {doc.ingested_at
-                          ? new Date(doc.ingested_at).toLocaleString("en-US", {
-                              year: "numeric",
-                              month: "short",
-                              day: "2-digit",
-                              hour: "numeric",
-                              minute: "2-digit"
-                            })
-                          : "—"}
+                        {formatDate(doc.ingested_at)}
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
@@ -264,16 +334,43 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        {canReprocess ? (
-                          <ActionButton
-                            onClick={() => reprocessDocument(doc)}
-                            disabled={workingKey === `reprocess-${doc.id}`}
-                          >
-                            {workingKey === `reprocess-${doc.id}` ? "Reprocessing..." : "Reprocess Document"}
-                          </ActionButton>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "#6b7280" }}>—</span>
-                        )}
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {ops.includes("extract") && !isOrphan && (
+                            <ActionButton
+                              tone="primary"
+                              onClick={() => extractRequirements(doc)}
+                              disabled={workingKey === `extract-${doc.id}`}
+                            >
+                              {workingKey === `extract-${doc.id}` ? "Extracting..." : "Extract Requirements"}
+                            </ActionButton>
+                          )}
+
+                          {ops.includes("reprocess") && !isOrphan && (
+                            <ActionButton
+                              tone="primary"
+                              onClick={() => reprocessDocument(doc)}
+                              disabled={workingKey === `reprocess-${doc.id}`}
+                            >
+                              {workingKey === `reprocess-${doc.id}` ? "Reprocessing..." : "Reprocess Document"}
+                            </ActionButton>
+                          )}
+
+                          {ops.includes("delete") && !isOrphan && (
+                            <ActionButton
+                              tone="danger"
+                              onClick={() => deleteDocument(doc)}
+                              disabled={workingKey === `delete-${doc.id}`}
+                            >
+                              {workingKey === `delete-${doc.id}` ? "Deleting..." : "Delete"}
+                            </ActionButton>
+                          )}
+
+                          {ops.includes("delete_orphan") && (
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>
+                              Cleanup orphan action can be added next.
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -286,4 +383,7 @@ export default function Documents() {
     </div>
   );
 }
+
+
+
 

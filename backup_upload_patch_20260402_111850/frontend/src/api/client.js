@@ -1,4 +1,4 @@
-const API_BASE =
+﻿const API_BASE =
   import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 async function request(path, { method = "GET", body, headers } = {}) {
@@ -60,28 +60,6 @@ function qs(paramsObj = {}) {
 }
 
 export const api = {
-  uploadFiles: async (formData) => {
-    const response = await fetch("http://127.0.0.1:8000/upload", {
-      method: "POST",
-      body: formData
-    });
-
-    if (!response.ok) {
-      let message = "Upload failed.";
-      try {
-        const data = await response.json();
-        message = data?.detail || data?.message || message;
-      } catch {
-        try {
-          const text = await response.text();
-          if (text) message = text;
-        } catch {}
-      }
-      throw new Error(message);
-    }
-
-    return response.json();
-  },
   // low-level
   get: (path) => request(path),
   post: (path, body) => request(path, { method: "POST", body }),
@@ -131,4 +109,3 @@ export const api = {
 };
 
 export { API_BASE };
-

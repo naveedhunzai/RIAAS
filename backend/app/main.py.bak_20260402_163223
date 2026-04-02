@@ -173,43 +173,20 @@ def ingest():
             file_hash=file_hash,
             status="needs_extraction",
         )
+
     # === AUTO REQUIREMENT EXTRACTION ===
     try:
         should_extract = bool(new_files or changed_files)
 
         if should_extract:
-            auto_topic = "all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations"
+            from .services.requirement_extractor import extract_requirements
 
-            contexts, citations = retrieve_context(auto_topic, top_k=50)
-
-            if not contexts:
-                print("ℹ️ Auto extraction skipped: no context retrieved after ingestion.")
-            else:
-                extracted = extract_requirements_from_context(auto_topic, contexts, model="gemma3:4b")
-                cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
-
-                auto_saved_ids = []
-                for r in extracted:
-                    cid = r.get("citation_id")
-                    source, page = (None, None)
-
-                    if cid in cite_map:
-                        source, page = cite_map[cid]
-                    elif citations:
-                        source = citations[0].get("source")
-                        page = citations[0].get("page")
-
-                    new_id = insert_requirement(
-                        requirement_text=r["requirement_text"],
-                        modality=r.get("modality"),
-                        category=r.get("category"),
-                        source=source,
-                        page=page,
-                        citation_id=cid,
-                    )
-                    auto_saved_ids.append(new_id)
-
-                print(f"✅ Requirements extracted automatically after ingestion: {len(auto_saved_ids)} saved")
+            extract_result = extract_requirements(
+                topic="all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations",
+                top_k=50,
+                model="gemma3:4b",
+            )
+            print("✅ Requirements extracted automatically after ingestion:", extract_result)
         else:
             print("ℹ️ No new or changed files. Automatic extraction skipped.")
 

@@ -1,5 +1,5 @@
-﻿from chromadb import PersistentClient
-from backend.app.config import VECTOR_DB_DIR
+from chromadb import PersistentClient
+from app.config import VECTOR_DB_DIR
 
 def get_collection():
     client = PersistentClient(path=str(VECTOR_DB_DIR))
@@ -32,3 +32,4 @@ def delete_by_source(collection, source_name):
 
     if results and results.get("ids"):
         collection.delete(ids=results["ids"])
+

@@ -27,7 +27,7 @@ function normalizeStatus(status) {
 }
 
 function normalizeStages(stages) {
-  if (!Array.isArray(stages) || stages.length === 0) return null;
+  if (!Array.isArray(stages) || stages.length === 0) return DEFAULT_STEPS;
 
   if (stages[0]?.step) {
     return stages.map((s) => ({
@@ -43,11 +43,124 @@ function normalizeStages(stages) {
     }));
   }
 
-  return null;
+  return DEFAULT_STEPS;
 }
 
-function buildCompletedSteps() {
-  return DEFAULT_STEPS.map((s) => ({ ...s, status: "done" }));
+function getStatusMeta(status) {
+  const s = normalizeStatus(status);
+
+  if (s === "done") {
+    return {
+      icon: "✔",
+      badge: "Completed",
+      bg: "#ecfdf5",
+      border: "#10b981",
+      text: "#065f46"
+    };
+  }
+
+  if (s === "active") {
+    return {
+      icon: "●",
+      badge: "In progress",
+      bg: "#eff6ff",
+      border: "#3b82f6",
+      text: "#1d4ed8"
+    };
+  }
+
+  if (s === "error") {
+    return {
+      icon: "✖",
+      badge: "Error",
+      bg: "#fef2f2",
+      border: "#ef4444",
+      text: "#991b1b"
+    };
+  }
+
+  return {
+    icon: "○",
+    badge: "Pending",
+    bg: "#f9fafb",
+    border: "#d1d5db",
+    text: "#374151"
+  };
+}
+
+function StepBar({ steps }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8
+      }}
+    >
+      {steps.map((item, index) => {
+        const label = STEP_LABELS[item.step] || item.step;
+        const meta = getStatusMeta(item.status);
+
+        return (
+          <div
+            key={item.step}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "42px 1fr auto",
+              alignItems: "center",
+              gap: 12,
+              background: meta.bg,
+              border: `1px solid ${meta.border}`,
+              borderRadius: 12,
+              padding: "10px 12px"
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: "999px",
+                background: "#ffffff",
+                border: `1px solid ${meta.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                color: meta.text,
+                fontSize: 12
+              }}
+            >
+              {meta.icon}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 700, color: "#111827", fontSize: 14 }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+                Step {index + 1} of {steps.length}
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: meta.text,
+                background: "#ffffff",
+                border: `1px solid ${meta.border}`,
+                borderRadius: 999,
+                padding: "5px 9px",
+                textTransform: "none",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {meta.badge}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function ListBlock({ title, items }) {
@@ -90,6 +203,26 @@ function ListBlock({ title, items }) {
   );
 }
 
+function StatCard({ title, value }) {
+  return (
+    <div
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 14,
+        padding: 16
+      }}
+    >
+      <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 6 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: "#111827" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function DetailCard({ label, value }) {
   return (
     <div
@@ -127,7 +260,6 @@ function formatDateTime(value) {
 export default function Ingest() {
   const [path, setPath] = useState("/Users/aaronnaveed/RIAAS/backend/data/raw_docs");
   const [steps, setSteps] = useState(DEFAULT_STEPS);
-  const [hasRun, setHasRun] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -156,16 +288,12 @@ export default function Ingest() {
       return `${STEP_LABELS[active.step] || active.step} in progress`;
     }
 
-    if (hasRun && progress === 100) {
+    if (progress === 100) {
       return "All steps completed";
     }
 
-    if (hasRun && progress > 0) {
-      return "Last ingestion status";
-    }
-
     return "Waiting to start";
-  }, [steps, progress, hasRun]);
+  }, [steps, progress]);
 
   const lastDocumentIngested = useMemo(() => {
     if (Array.isArray(result?.changed_files) && result.changed_files.length > 0) {
@@ -188,46 +316,22 @@ export default function Ingest() {
     );
   }, [result]);
 
-  async function uploadSelectedFiles() {
-    if (!selectedFiles.length) return null;
-
-    const formData = new FormData();
-    selectedFiles.forEach((file) => {
-      formData.append("files", file);
-    });
-
-    return api.uploadFiles(formData);
-  }
-
   async function runIngestion() {
     try {
       setRunning(true);
-      setHasRun(true);
       setError("");
       setResult(null);
-      setSteps(
-        DEFAULT_STEPS.map((s, i) => ({
-          ...s,
-          status: i === 0 ? "active" : "pending"
-        }))
-      );
-
-      if (selectedFiles.length > 0) {
-        await uploadSelectedFiles();
-      }
+      setSteps(DEFAULT_STEPS.map((s, i) => ({
+        ...s,
+        status: i === 0 ? "active" : "pending"
+      })));
 
       const res = await api.ingest({ path });
       setResult(res);
       setLastRunAt(new Date().toISOString());
-
-      const normalized = normalizeStages(res.stages);
-      if (normalized && normalized.length > 0) {
-        setSteps(normalized);
-      } else {
-        setSteps(buildCompletedSteps());
-      }
+      setSteps(normalizeStages(res.stages));
     } catch (err) {
-      setError(err?.message || "Ingestion failed.");
+      setError(err.message || "Ingestion failed.");
       setSteps((prev) => {
         const next = prev.map((s) => ({ ...s }));
         const activeIndex = next.findIndex((s) => normalizeStatus(s.status) === "active");
@@ -256,7 +360,6 @@ export default function Ingest() {
 
   function resetState() {
     setSteps(DEFAULT_STEPS);
-    setHasRun(false);
     setError("");
     setResult(null);
     setSelectedFiles([]);
@@ -406,7 +509,7 @@ export default function Ingest() {
                   Add files with Browse
                 </div>
                 <div style={{ fontSize: 13, color: "#6b7280" }}>
-                  Browsed PDFs will be uploaded into the RIAAS raw docs folder before ingestion runs.
+                  UI only for now. Ingestion still uses the folder path above.
                 </div>
               </div>
 
@@ -558,39 +661,44 @@ export default function Ingest() {
             {progress}% complete
           </div>
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
-            {steps.map((s, i) => {
-              const status = normalizeStatus(s.status);
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 6 }}>
+          {steps.map((s, i) => {
+            const status = (s.status || "").toLowerCase();
 
-              let color = "#6b7280";
-              let weight = 500;
-              let icon = "○";
+            let color = "#6b7280";
+            let weight = 500;
+            let icon = "○";
 
-              if (status === "done") {
-                color = "#16a34a";
-                icon = "✔";
-                weight = 600;
-              } else if (status === "active") {
-                color = "#2563eb";
-                icon = "●";
-                weight = 700;
-              } else if (status === "error") {
-                color = "#dc2626";
-                icon = "✖";
-                weight = 700;
-              }
+            if (status === "done") {
+              color = "#16a34a";
+              icon = "✔";
+              weight = 600;
+            }
 
-              return (
-                <div key={s.step} style={{ fontSize: 13, color, fontWeight: weight }}>
-                  {icon} {STEP_LABELS[s.step] || s.step}
-                  {i < steps.length - 1 && (
-                    <span style={{ margin: "0 6px", color: "#9ca3af" }}>→</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+            if (status === "active") {
+              color = "#2563eb";
+              icon = "●";
+              weight = 700;
+            }
+
+            if (status === "error") {
+              color = "#dc2626";
+              icon = "✖";
+              weight = 700;
+            }
+
+            return (
+              <div key={i} style={{ fontSize: 13, color, fontWeight: weight }}>
+                {icon} {STEP_LABELS[s.step] || s.step}
+                {i < steps.length - 1 && <span style={{ margin: "0 6px", color: "#9ca3af" }}>→</span>}
+              </div>
+            );
+          })}
         </div>
+
+        </div>
+
+        
 
         <div
           style={{
@@ -609,16 +717,18 @@ export default function Ingest() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
               gap: 12
             }}
           >
             <DetailCard label="Last document ingested" value={lastDocumentIngested} />
             <DetailCard label="Last run date" value={formatDateTime(lastRunAt)} />
+            <DetailCard label="Loaded pages" value={result?.loaded_pages ?? 0} />
+            <DetailCard label="Total chunks" value={result?.total_chunks ?? 0} />
+            <DetailCard label="New files" value={result?.new_files?.length ?? 0} />
             <DetailCard label="Changed files" value={result?.changed_files?.length ?? 0} />
             <DetailCard label="Skipped files" value={result?.skipped_files?.length ?? 0} />
             <DetailCard label="Processed files" value={totalProcessedFiles} />
-            <DetailCard label="Selected PDFs" value={selectedFiles.length} />
           </div>
         </div>
 
@@ -654,6 +764,19 @@ export default function Ingest() {
         <div
           style={{
             display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 14
+          }}
+        >
+          <StatCard title="Loaded pages" value={result?.loaded_pages ?? 0} />
+          <StatCard title="Total chunks" value={result?.total_chunks ?? 0} />
+          <StatCard title="Selected PDFs" value={selectedFiles.length} />
+          <StatCard title="New files" value={result?.new_files?.length ?? 0} />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
             gap: 14
           }}
@@ -667,3 +790,4 @@ export default function Ingest() {
     </div>
   );
 }
+

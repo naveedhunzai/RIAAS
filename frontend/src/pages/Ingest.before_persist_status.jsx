@@ -27,7 +27,7 @@ function normalizeStatus(status) {
 }
 
 function normalizeStages(stages) {
-  if (!Array.isArray(stages) || stages.length === 0) return null;
+  if (!Array.isArray(stages) || stages.length === 0) return DEFAULT_STEPS;
 
   if (stages[0]?.step) {
     return stages.map((s) => ({
@@ -43,11 +43,7 @@ function normalizeStages(stages) {
     }));
   }
 
-  return null;
-}
-
-function buildCompletedSteps() {
-  return DEFAULT_STEPS.map((s) => ({ ...s, status: "done" }));
+  return DEFAULT_STEPS;
 }
 
 function ListBlock({ title, items }) {
@@ -127,7 +123,6 @@ function formatDateTime(value) {
 export default function Ingest() {
   const [path, setPath] = useState("/Users/aaronnaveed/RIAAS/backend/data/raw_docs");
   const [steps, setSteps] = useState(DEFAULT_STEPS);
-  const [hasRun, setHasRun] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
@@ -156,16 +151,12 @@ export default function Ingest() {
       return `${STEP_LABELS[active.step] || active.step} in progress`;
     }
 
-    if (hasRun && progress === 100) {
+    if (progress === 100) {
       return "All steps completed";
     }
 
-    if (hasRun && progress > 0) {
-      return "Last ingestion status";
-    }
-
     return "Waiting to start";
-  }, [steps, progress, hasRun]);
+  }, [steps, progress]);
 
   const lastDocumentIngested = useMemo(() => {
     if (Array.isArray(result?.changed_files) && result.changed_files.length > 0) {
@@ -202,7 +193,6 @@ export default function Ingest() {
   async function runIngestion() {
     try {
       setRunning(true);
-      setHasRun(true);
       setError("");
       setResult(null);
       setSteps(
@@ -219,13 +209,7 @@ export default function Ingest() {
       const res = await api.ingest({ path });
       setResult(res);
       setLastRunAt(new Date().toISOString());
-
-      const normalized = normalizeStages(res.stages);
-      if (normalized && normalized.length > 0) {
-        setSteps(normalized);
-      } else {
-        setSteps(buildCompletedSteps());
-      }
+      setSteps(normalizeStages(res.stages));
     } catch (err) {
       setError(err?.message || "Ingestion failed.");
       setSteps((prev) => {
@@ -256,7 +240,6 @@ export default function Ingest() {
 
   function resetState() {
     setSteps(DEFAULT_STEPS);
-    setHasRun(false);
     setError("");
     setResult(null);
     setSelectedFiles([]);

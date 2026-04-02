@@ -1,5 +1,5 @@
-﻿import requests
-from backend.app.core.config import settings
+import requests
+from app.core.config import settings
 
 def generate(prompt: str, timeout: int = 120) -> str:
     url = f"{settings.OLLAMA_HOST}/api/generate"
@@ -8,4 +8,5 @@ def generate(prompt: str, timeout: int = 120) -> str:
     r.raise_for_status()
     data = r.json()
     return data.get("response", "")
+
 

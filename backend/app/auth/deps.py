@@ -5,7 +5,7 @@ from typing import List, Callable, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from backend.app.auth.rbac import decode_token
+from app.auth.rbac import decode_token
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -34,4 +34,5 @@ def require_roles(*allowed: str) -> Callable:
         return user
 
     return _dep
+
 

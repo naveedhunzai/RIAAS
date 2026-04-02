@@ -1,5 +1,5 @@
-﻿import requests
-from backend.app.core.config import settings
+import requests
+from app.core.config import settings
 
 def ollama_generate(
     prompt: str,
@@ -23,4 +23,5 @@ def ollama_generate(
 
     data = response.json()
     return data.get("response", "").strip()
+
 

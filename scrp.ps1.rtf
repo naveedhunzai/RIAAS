@@ -1,0 +1,109 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww18500\viewh10260\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 # ==========================================\
+# RIAAS CLEAN RESTART SCRIPT FOR MAC + PWSH\
+# Stops processes on ports, fixes imports,\
+# then starts Ollama, Backend, Frontend\
+# ==========================================\
+\
+$Root = "/Users/aaronnaveed/RIAAS"\
+$Backend = Join-Path $Root "backend"\
+$Frontend = Join-Path $Root "frontend"\
+\
+Write-Host "\uc0\u55357 \u56580  Restarting RIAAS..." -ForegroundColor Cyan\
+\
+function Stop-PortProcess \{\
+    param(\
+        [int]$Port,\
+        [string]$Label\
+    )\
+\
+    try \{\
+        $pids = lsof -ti tcp:$Port 2>$null\
+        if ($pids) \{\
+            foreach ($pid in ($pids -split "`n" | Where-Object \{ $_ -match '^\\d+$' \})) \{\
+                Write-Host "\uc0\u55357 \u57041  Killing $Label process on port $Port (PID $pid)" -ForegroundColor Yellow\
+                kill -9 $pid 2>$null\
+            \}\
+        \} else \{\
+            Write-Host "\uc0\u8505 \u65039  No process found on port $Port" -ForegroundColor DarkGray\
+        \}\
+    \}\
+    catch \{\
+        Write-Host "\uc0\u9888 \u65039  Could not inspect port $Port" -ForegroundColor DarkYellow\
+    \}\
+\}\
+\
+# STEP 1 \'97 Stop existing services by port\
+Stop-PortProcess -Port 8000 -Label "Backend"\
+Stop-PortProcess -Port 5173 -Label "Frontend"\
+Stop-PortProcess -Port 11434 -Label "Ollama"\
+\
+Start-Sleep -Seconds 2\
+\
+# STEP 2 \'97 Validate folders\
+if (!(Test-Path $Backend)) \{\
+    Write-Host "\uc0\u10060  Backend folder not found: $Backend" -ForegroundColor Red\
+    exit 1\
+\}\
+if (!(Test-Path $Frontend)) \{\
+    Write-Host "\uc0\u10060  Frontend folder not found: $Frontend" -ForegroundColor Red\
+    exit 1\
+\}\
+if (!(Test-Path (Join-Path $Backend "app"))) \{\
+    Write-Host "\uc0\u10060  app folder not found inside backend" -ForegroundColor Red\
+    exit 1\
+\}\
+\
+# STEP 3 \'97 Fix backend imports\
+Write-Host "\uc0\u55357 \u56615  Fixing backend imports..." -ForegroundColor Yellow\
+Get-ChildItem -Recurse "$Backend/app" -Include *.py | ForEach-Object \{\
+    $file = $_.FullName\
+    $content = Get-Content $file -Raw\
+    $updated = $content `\
+        -replace 'from backend\\.app\\.', 'from app.' `\
+        -replace 'import backend\\.app\\.', 'import app.'\
+    if ($updated -ne $content) \{\
+        Set-Content -Path $file -Value $updated -Encoding UTF8\
+        Write-Host "\uc0\u10004  Fixed: $file" -ForegroundColor Green\
+    \}\
+\}\
+\
+# STEP 4 \'97 Start Ollama\
+Write-Host "\uc0\u55357 \u56960  Starting Ollama..." -ForegroundColor Yellow\
+Start-Process pwsh -ArgumentList @(\
+    "-NoExit",\
+    "-Command",\
+    "ollama serve"\
+) -WorkingDirectory $Root\
+\
+Start-Sleep -Seconds 4\
+\
+# STEP 5 \'97 Start Backend\
+Write-Host "\uc0\u55357 \u56960  Starting Backend..." -ForegroundColor Yellow\
+Start-Process pwsh -ArgumentList @(\
+    "-NoExit",\
+    "-Command",\
+    "cd '$Backend'; python -m uvicorn app.main:app --reload"\
+) -WorkingDirectory $Backend\
+\
+Start-Sleep -Seconds 4\
+\
+# STEP 6 \'97 Start Frontend\
+Write-Host "\uc0\u55357 \u56960  Starting Frontend..." -ForegroundColor Yellow\
+Start-Process pwsh -ArgumentList @(\
+    "-NoExit",\
+    "-Command",\
+    "cd '$Frontend'; npm run dev"\
+) -WorkingDirectory $Frontend\
+\
+Write-Host ""\
+Write-Host "\uc0\u9989  RIAAS restarted successfully" -ForegroundColor Green\
+Write-Host "Backend:  http://127.0.0.1:8000" -ForegroundColor Cyan\
+Write-Host "Docs:     http://127.0.0.1:8000/docs" -ForegroundColor Cyan\
+Write-Host "Frontend: http://localhost:5173" -ForegroundColor Cyan}

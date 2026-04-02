@@ -1,5 +1,5 @@
-﻿import requests
-from backend.app.core.config import settings
+import requests
+from app.core.config import settings
 
 def ollama_generate(
     prompt: str,
@@ -22,4 +22,5 @@ def ollama_generate(
 
 if __name__ == "__main__":
     print(ollama_generate("Explain SAR safe harbor in one sentence."))
+
 

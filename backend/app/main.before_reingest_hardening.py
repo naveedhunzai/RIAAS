@@ -1,25 +1,13 @@
-from pathlib import Path
-import hashlib
-import os
-
+from .routes import upload
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-from .routes import upload
-from .rag.qa import retrieve_context, retrieve_clean
-from .rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
+from .rag.qa import retrieve_context
+from pathlib import Path
+import hashlib
 from app.rag.ollama_client import ollama_generate
-
-from app.config import RAW_DOCS_DIR
-from app.ingest.loader import load_pdf_files
-from app.ingest.chunker import chunk_documents
-from app.ingest.embedder import embed_chunks
-from app.rag.retriever import get_collection, upsert_chunks, delete_by_source
-
 from app.db.sqlite_db import (
     init_db,
-    get_conn,
     insert_requirement,
     list_requirements,
     get_requirement,
@@ -29,18 +17,22 @@ from app.db.sqlite_db import (
     is_document_ingested,
     insert_ingested_document,
     list_ingested_documents,
-    get_ingested_document_by_id,
     get_ingested_document_by_path,
     mark_document_inactive,
     reactivate_document,
-    upsert_ingested_document,
-    list_requirement_ids_by_source,
-    delete_actions_by_requirement_ids,
-    delete_requirements_by_source,
-    delete_ingested_document_by_id,
 )
+from app.rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
+
+from app.config import RAW_DOCS_DIR
+from app.ingest.loader import load_pdf_files
+from app.ingest.chunker import chunk_documents
+from app.ingest.embedder import embed_chunks
+from app.rag.retriever import get_collection, upsert_chunks
+from app.rag.retriever import delete_by_source
+from app.rag.qa import retrieve_clean
 
 app = FastAPI(title="RIAAS Backend", version="0.1.0")
+
 
 app.include_router(upload.router)
 app.add_middleware(
@@ -53,7 +45,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 init_db()
 
 
@@ -104,15 +95,15 @@ def ingest():
     if not pdf_files:
         raise HTTPException(
             status_code=400,
-            detail="No PDFs found in backend/data/raw_docs/",
+            detail="No PDFs found in backend/data/raw_docs/"
         )
 
-    current_paths = {str(p.resolve()) for p in pdf_files}
+    current_paths = {str(p) for p in pdf_files}
     tracked_docs = list_ingested_documents(limit=5000)
 
     missing_files = []
     for doc in tracked_docs:
-        tracked_path = str(doc["file_path"])
+        tracked_path = doc["file_path"]
         if doc.get("is_active", 1) == 1 and tracked_path not in current_paths:
             mark_document_inactive(tracked_path)
             missing_files.append(tracked_path)
@@ -122,16 +113,15 @@ def ingest():
     changed_files = []
 
     for pdf_path in pdf_files:
-        resolved_path = str(pdf_path.resolve())
         file_hash = compute_file_hash(pdf_path)
-        existing = get_ingested_document_by_path(resolved_path)
+        existing = get_ingested_document_by_path(str(pdf_path))
 
         if existing is None:
             new_files.append(pdf_path)
             continue
 
-        if existing.get("file_hash") == file_hash:
-            reactivate_document(resolved_path)
+        if existing["file_hash"] == file_hash:
+            reactivate_document(str(pdf_path))
             skipped_files.append(pdf_path.name)
         else:
             new_files.append(pdf_path)
@@ -152,7 +142,7 @@ def ingest():
     if not docs:
         raise HTTPException(
             status_code=400,
-            detail="No readable PDF text found in new or changed files.",
+            detail="No readable PDF text found in new or changed files."
         )
 
     chunks = chunk_documents(docs, chunk_size=800, overlap=150)
@@ -160,56 +150,33 @@ def ingest():
 
     collection = get_collection()
 
+    # Remove vectors for changed files
     for fname in changed_files:
         delete_by_source(collection, fname)
-
     upsert_chunks(collection, chunks, embeddings)
 
     for pdf_path in new_files:
-        file_hash = compute_file_hash(pdf_path)
-        upsert_ingested_document(
+        insert_ingested_document(
             file_name=pdf_path.name,
-            file_path=str(pdf_path.resolve()),
-            file_hash=file_hash,
-            status="needs_extraction",
+            file_path=str(pdf_path),
+            file_hash=compute_file_hash(pdf_path),
+            last_modified=str(pdf_path.stat().st_mtime),
         )
+
+
     # === AUTO REQUIREMENT EXTRACTION ===
     try:
         should_extract = bool(new_files or changed_files)
 
         if should_extract:
-            auto_topic = "all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations"
+            from .services.requirement_extractor import extract_requirements
 
-            contexts, citations = retrieve_context(auto_topic, top_k=50)
-
-            if not contexts:
-                print("ℹ️ Auto extraction skipped: no context retrieved after ingestion.")
-            else:
-                extracted = extract_requirements_from_context(auto_topic, contexts, model="gemma3:4b")
-                cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
-
-                auto_saved_ids = []
-                for r in extracted:
-                    cid = r.get("citation_id")
-                    source, page = (None, None)
-
-                    if cid in cite_map:
-                        source, page = cite_map[cid]
-                    elif citations:
-                        source = citations[0].get("source")
-                        page = citations[0].get("page")
-
-                    new_id = insert_requirement(
-                        requirement_text=r["requirement_text"],
-                        modality=r.get("modality"),
-                        category=r.get("category"),
-                        source=source,
-                        page=page,
-                        citation_id=cid,
-                    )
-                    auto_saved_ids.append(new_id)
-
-                print(f"✅ Requirements extracted automatically after ingestion: {len(auto_saved_ids)} saved")
+            extract_result = extract_requirements(
+                topic="all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations",
+                top_k=50,
+                model="gemma3:4b"
+            )
+            print("✅ Requirements extracted automatically after ingestion:", extract_result)
         else:
             print("ℹ️ No new or changed files. Automatic extraction skipped.")
 
@@ -240,7 +207,7 @@ def ask(question: str, top_k: int = 5):
     return {
         "question": question,
         "top_k": top_k,
-        "results": retrieve_clean(question, top_k=top_k),
+        "results": retrieve_clean(question, top_k=top_k)
     }
 
 
@@ -276,7 +243,7 @@ def answer(req: AnswerRequest):
         "top_k": req.top_k,
         "answer": response_text,
         "citations": citations,
-        "sources": sources,
+        "sources": sources
     }
 
 
@@ -298,7 +265,6 @@ def extract_requirements(req: ExtractRequirementsRequest):
     for r in extracted:
         cid = r.get("citation_id")
         source, page = (None, None)
-
         if cid in cite_map:
             source, page = cite_map[cid]
         elif citations:
@@ -319,7 +285,7 @@ def extract_requirements(req: ExtractRequirementsRequest):
         "topic": topic,
         "retrieved_citations": citations,
         "extracted_count": len(extracted),
-        "saved_requirement_ids": saved_ids,
+        "saved_requirement_ids": saved_ids
     }
 
 
@@ -355,11 +321,7 @@ def requirement_to_actions(req_id: int, req_body: CreateActionsRequest):
         )
         action_ids.append(aid)
 
-    return {
-        "requirement_id": req_id,
-        "created_action_ids": action_ids,
-        "count": len(action_ids),
-    }
+    return {"requirement_id": req_id, "created_action_ids": action_ids, "count": len(action_ids)}
 
 
 @app.get("/actions")
@@ -378,6 +340,19 @@ def set_action_status(action_id: int, body: UpdateActionStatusRequest):
     return {"action_id": action_id, "status": s}
 
 
+
+
+
+
+from .db.sqlite_db import (
+    get_ingested_document_by_id,
+    list_requirement_ids_by_source,
+    delete_actions_by_requirement_ids,
+    delete_requirements_by_source,
+    delete_ingested_document_by_id,
+)
+from .rag.retriever import get_collection
+import os
 @app.delete("/ingested-documents/{doc_id}")
 def delete_ingested_document(doc_id: int):
     doc = get_ingested_document_by_id(doc_id)
@@ -426,90 +401,84 @@ def delete_ingested_document(doc_id: int):
     }
 
 
+
+from .db.sqlite_db import get_conn
+
 @app.get("/document-integrity")
 def document_integrity(limit: int = 200):
+
     with get_conn() as conn:
-        docs = conn.execute(
-            """
+
+        # 1. Normal documents
+        docs = conn.execute("""
             SELECT * FROM ingested_documents
             ORDER BY id DESC
             LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        """, (limit,)).fetchall()
 
         results = []
 
         for d in docs:
             file_name = d["file_name"]
 
-            req_count = conn.execute(
-                """
+            req_count = conn.execute("""
                 SELECT COUNT(*) FROM requirements WHERE source = ?
-                """,
-                (file_name,),
-            ).fetchone()[0]
+            """, (file_name,)).fetchone()[0]
 
-            action_count = conn.execute(
-                """
+            action_count = conn.execute("""
                 SELECT COUNT(*) FROM actions a
                 JOIN requirements r ON a.requirement_id = r.id
                 WHERE r.source = ?
-                """,
-                (file_name,),
-            ).fetchone()[0]
+            """, (file_name,)).fetchone()[0]
 
             status = "Valid" if req_count > 0 else "Invalid: Missing requirements"
 
-            results.append(
-                {
-                    "type": "document",
-                    "id": d["id"],
-                    "file_name": file_name,
-                    "ingested_at": d["ingested_at"],
-                    "requirements": req_count,
-                    "actions": action_count,
-                    "status": status,
-                }
-            )
+            results.append({
+                "type": "document",
+                "id": d["id"],
+                "file_name": file_name,
+                "ingested_at": d["ingested_at"],
+                "requirements": req_count,
+                "actions": action_count,
+                "status": status
+            })
 
-        orphan_rows = conn.execute(
-            """
+        # 2. Orphan requirements
+        orphan_rows = conn.execute("""
             SELECT source, COUNT(*) as req_count
             FROM requirements
             WHERE source NOT IN (
                 SELECT file_name FROM ingested_documents
             )
             GROUP BY source
-            """
-        ).fetchall()
+        """).fetchall()
 
         for o in orphan_rows:
-            action_count = conn.execute(
-                """
+            action_count = conn.execute("""
                 SELECT COUNT(*) FROM actions a
                 JOIN requirements r ON a.requirement_id = r.id
                 WHERE r.source = ?
-                """,
-                (o["source"],),
-            ).fetchone()[0]
+            """, (o["source"],)).fetchone()[0]
 
-            results.append(
-                {
-                    "type": "orphan",
-                    "file_name": "?",
-                    "source": o["source"],
-                    "requirements": o["req_count"],
-                    "actions": action_count,
-                    "status": "Orphan requirements",
-                }
-            )
+            results.append({
+                "type": "orphan",
+                "file_name": "?",
+                "source": o["source"],
+                "requirements": o["req_count"],
+                "actions": action_count,
+                "status": "Orphan requirements"
+            })
 
         return {"items": results}
 
 
+
 @app.get("/document-lifecycle")
 def document_lifecycle(limit: int = 200):
+    from .db.sqlite_db import get_conn
+    from .rag.retriever import get_collection
+    import os
+
     def count_vectors_for_source(source: str) -> int:
         try:
             collection = get_collection()
@@ -520,15 +489,12 @@ def document_lifecycle(limit: int = 200):
             return 0
 
     with get_conn() as conn:
-        docs = conn.execute(
-            """
+        docs = conn.execute("""
             SELECT *
             FROM ingested_documents
             ORDER BY id DESC
             LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        """, (limit,)).fetchall()
 
         items = []
 
@@ -538,24 +504,18 @@ def document_lifecycle(limit: int = 200):
             file_exists = bool(file_path) and os.path.exists(file_path)
             file_hash_present = bool(d["file_hash"])
 
-            requirement_count = conn.execute(
-                """
+            requirement_count = conn.execute("""
                 SELECT COUNT(*)
                 FROM requirements
                 WHERE source = ?
-                """,
-                (file_name,),
-            ).fetchone()[0]
+            """, (file_name,)).fetchone()[0]
 
-            action_count = conn.execute(
-                """
+            action_count = conn.execute("""
                 SELECT COUNT(*)
                 FROM actions a
                 JOIN requirements r ON a.requirement_id = r.id
                 WHERE r.source = ?
-                """,
-                (file_name,),
-            ).fetchone()[0]
+            """, (file_name,)).fetchone()[0]
 
             vector_count = count_vectors_for_source(file_name)
 
@@ -569,27 +529,24 @@ def document_lifecycle(limit: int = 200):
                 status = "Valid"
                 allowed_operations = ["view", "reprocess", "delete"]
 
-            items.append(
-                {
-                    "type": "document",
-                    "id": d["id"],
-                    "file_name": file_name,
-                    "source": file_name,
-                    "file_path": file_path,
-                    "file_exists": file_exists,
-                    "file_hash_present": file_hash_present,
-                    "ingested_at": d["ingested_at"],
-                    "chunk_count": vector_count,
-                    "embedding_count": vector_count,
-                    "requirement_count": requirement_count,
-                    "action_count": action_count,
-                    "status": status,
-                    "allowed_operations": allowed_operations,
-                }
-            )
+            items.append({
+                "type": "document",
+                "id": d["id"],
+                "file_name": file_name,
+                "source": file_name,
+                "file_path": file_path,
+                "file_exists": file_exists,
+                "file_hash_present": file_hash_present,
+                "ingested_at": d["ingested_at"],
+                "chunk_count": vector_count,
+                "embedding_count": vector_count,
+                "requirement_count": requirement_count,
+                "action_count": action_count,
+                "status": status,
+                "allowed_operations": allowed_operations,
+            })
 
-        orphan_rows = conn.execute(
-            """
+        orphan_rows = conn.execute("""
             SELECT
                 source,
                 COUNT(*) AS requirement_count
@@ -598,170 +555,34 @@ def document_lifecycle(limit: int = 200):
               AND source NOT IN (SELECT file_name FROM ingested_documents)
             GROUP BY source
             ORDER BY source
-            """
-        ).fetchall()
+        """).fetchall()
 
         for row in orphan_rows:
             source = row["source"]
 
-            action_count = conn.execute(
-                """
+            action_count = conn.execute("""
                 SELECT COUNT(*)
                 FROM actions a
                 JOIN requirements r ON a.requirement_id = r.id
                 WHERE r.source = ?
-                """,
-                (source,),
-            ).fetchone()[0]
+            """, (source,)).fetchone()[0]
 
-            items.append(
-                {
-                    "type": "orphan",
-                    "id": None,
-                    "file_name": "?",
-                    "source": source,
-                    "file_path": None,
-                    "file_exists": False,
-                    "file_hash_present": False,
-                    "ingested_at": None,
-                    "chunk_count": 0,
-                    "embedding_count": 0,
-                    "requirement_count": row["requirement_count"],
-                    "action_count": action_count,
-                    "status": "Orphan requirements",
-                    "allowed_operations": ["delete_orphan"],
-                }
-            )
+            items.append({
+                "type": "orphan",
+                "id": None,
+                "file_name": "?",
+                "source": source,
+                "file_path": None,
+                "file_exists": False,
+                "file_hash_present": False,
+                "ingested_at": None,
+                "chunk_count": 0,
+                "embedding_count": 0,
+                "requirement_count": row["requirement_count"],
+                "action_count": action_count,
+                "status": "Orphan requirements",
+                "allowed_operations": ["delete_orphan"],
+            })
 
         return {"items": items}
 
-
-@app.post("/reingest-document/{doc_id}")
-def reingest_document(doc_id: int):
-    steps = {
-        "lookup": "pending",
-        "validate_file": "pending",
-        "cleanup_actions": "pending",
-        "cleanup_requirements": "pending",
-        "cleanup_vectors": "pending",
-        "cleanup_document_row": "pending",
-        "ingest": "pending",
-        "validate_document_row": "pending",
-        "validate_requirements": "pending",
-    }
-    errors = []
-
-    doc = None
-    file_name = None
-    file_path = None
-    deleted_actions = 0
-    deleted_requirements = 0
-    deleted_vectors = 0
-    deleted_document = 0
-    ingest_result = None
-    recreated_doc = None
-    requirement_count = 0
-
-    try:
-        doc = get_ingested_document_by_id(doc_id)
-        if not doc:
-            raise HTTPException(status_code=404, detail="Ingested document not found")
-        file_name = doc.get("file_name")
-        file_path = doc.get("file_path")
-        steps["lookup"] = "ok"
-    except HTTPException:
-        steps["lookup"] = "failed"
-        raise
-    except Exception as e:
-        steps["lookup"] = "failed"
-        raise HTTPException(status_code=500, detail=f"Document lookup failed: {e}")
-
-    try:
-        if not file_path or not os.path.exists(file_path):
-            raise HTTPException(
-                status_code=400,
-                detail=f"File not found on disk for reprocess: {file_name or doc_id}",
-            )
-        steps["validate_file"] = "ok"
-    except HTTPException:
-        steps["validate_file"] = "failed"
-        raise
-    except Exception as e:
-        steps["validate_file"] = "failed"
-        raise HTTPException(status_code=500, detail=f"File validation failed: {e}")
-
-    try:
-        requirement_ids = list_requirement_ids_by_source(file_name)
-        deleted_actions = delete_actions_by_requirement_ids(requirement_ids)
-        steps["cleanup_actions"] = "ok"
-    except Exception as e:
-        steps["cleanup_actions"] = "failed"
-        errors.append(f"cleanup_actions: {e}")
-
-    try:
-        deleted_requirements = delete_requirements_by_source(file_name)
-        steps["cleanup_requirements"] = "ok"
-    except Exception as e:
-        steps["cleanup_requirements"] = "failed"
-        errors.append(f"cleanup_requirements: {e}")
-
-    try:
-        collection = get_collection()
-        before = collection.count()
-        collection.delete(where={"source": file_name})
-        after = collection.count()
-        deleted_vectors = max(0, before - after)
-        steps["cleanup_vectors"] = "ok"
-    except Exception as e:
-        steps["cleanup_vectors"] = "failed"
-        errors.append(f"cleanup_vectors: {e}")
-
-    try:
-        deleted_document = delete_ingested_document_by_id(doc_id)
-        steps["cleanup_document_row"] = "ok"
-    except Exception as e:
-        steps["cleanup_document_row"] = "failed"
-        errors.append(f"cleanup_document_row: {e}")
-
-    try:
-        ingest_result = ingest()
-        steps["ingest"] = "ok"
-    except Exception as e:
-        steps["ingest"] = "failed"
-        errors.append(f"ingest: {e}")
-
-    try:
-        recreated_doc = get_ingested_document_by_path(file_path)
-        if not recreated_doc:
-            raise Exception("Document row was not recreated after ingest")
-        steps["validate_document_row"] = "ok"
-    except Exception as e:
-        steps["validate_document_row"] = "failed"
-        errors.append(f"validate_document_row: {e}")
-
-    try:
-        requirement_ids_after = list_requirement_ids_by_source(file_name)
-        requirement_count = len(requirement_ids_after)
-        if requirement_count <= 0:
-            raise Exception("No requirements found after reprocess")
-        steps["validate_requirements"] = "ok"
-    except Exception as e:
-        steps["validate_requirements"] = "failed"
-        errors.append(f"validate_requirements: {e}")
-
-    overall_status = "success" if len(errors) == 0 else "partial_failure"
-
-    return {
-        "status": overall_status,
-        "file_name": file_name,
-        "doc_id": doc_id,
-        "recreated_document_id": recreated_doc.get("id") if recreated_doc else None,
-        "deleted_document_rows": deleted_document,
-        "deleted_requirements": deleted_requirements,
-        "deleted_actions": deleted_actions,
-        "deleted_vectors": deleted_vectors,
-        "requirement_count_after": requirement_count,
-        "steps": steps,
-        "errors": errors,
-        "ingest_result": ingest_result,
-    }

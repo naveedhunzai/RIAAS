@@ -2,7 +2,7 @@ import json
 import re
 from typing import Any
 
-from app.rag.ollama_client import ollama_generate
+from backend.app.rag.ollama_client import ollama_generate
 
 
 def _escape_control_chars_in_strings(s: str) -> str:
@@ -170,33 +170,6 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         except (TypeError, ValueError):
             cid = None
 
-        # 🔥 Fallback logic for missing citation_id
-        if cid is None:
-            best_id = None
-            best_score = 0
-
-            for idx, ctx in enumerate(contexts, start=1):
-                ctx_lower = ctx.lower()
-                rt_lower = rt.lower()
-
-                # strong match
-                if rt_lower in ctx_lower:
-                    cid = idx
-                    break
-
-                # weak match score
-                overlap = 0
-                for w in rt_lower.split():
-                    if w in ctx_lower:
-                        overlap += 1
-
-                if overlap > best_score:
-                    best_score = overlap
-                    best_id = idx
-
-            if cid is None:
-                cid = best_id if best_id else 1
-
         cleaned.append({
             "requirement_text": rt,
             "modality": normalize_modality(item.get("modality")),
@@ -272,5 +245,3 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
         })
 
     return cleaned
-
-
