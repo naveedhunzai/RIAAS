@@ -292,7 +292,7 @@ def extract_requirements(req: ExtractRequirementsRequest):
         raise HTTPException(status_code=400, detail="topic cannot be empty")
 
     runtime = get_runtime_settings()
-    resolved_top_k = int(resolve_param(req.top_k, runtime["top_k"]))
+    resolved_top_k = int(resolve_param(req.top_k, runtime["max_context_chunks"]))
     resolved_model = str(resolve_param(req.model, runtime["model"]))
 
     contexts, citations = retrieve_context(topic, top_k=resolved_top_k)
@@ -795,7 +795,6 @@ def health():
         "vector_db": "Connected",
         "database": "Connected"
     }
-
 
 
 

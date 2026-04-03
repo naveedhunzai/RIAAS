@@ -1,46 +1,27 @@
-$ErrorActionPreference = "Stop"
+$mainFile = ".\backend\app\main.py"
+$backupDir = ".\backend\backup"
 
-# Find Documents page
-$file = Get-ChildItem -Path . -Recurse -Include *.js,*.jsx -File |
-Where-Object {
-    (Get-Content $_.FullName -Raw) -match 'Document Lifecycle'
-} | Select-Object -First 1
-
-if (-not $file) {
-    Write-Host "❌ Documents page not found"
+if (!(Test-Path $mainFile)) {
+    Write-Host "❌ main.py not found"
     exit 1
 }
 
-$path = $file.FullName
-Write-Host "📄 Found: $path"
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+$ts = Get-Date -Format "yyyyMMdd_HHmmss"
+Copy-Item $mainFile "$backupDir\main_before_extract_fix_$ts.py"
+Write-Host "✅ Backup created"
 
-# Backup
-$backup = "$path.bak_$(Get-Date -Format yyyyMMdd_HHmmss)"
-Copy-Item $path $backup
-Write-Host "🛟 Backup: $backup"
+$content = Get-Content $mainFile -Raw
 
-$content = Get-Content $path -Raw
+$old = '    resolved_top_k = int(resolve_param(req.top_k, runtime["max_context_chunks"]))'
+$new = '    resolved_top_k = int(resolve_param(req.top_k, runtime["top_k"]))'
 
-# Replace Reprocess button block
-$content = $content -replace '(?s)<button[^>]*>Reprocess Document</button>', @'
-<button
-  style={{
-    padding: "6px 10px",
-    borderRadius: 6,
-    border: "1px solid #d1d5db",
-    cursor: doc.status === "Valid" ? "not-allowed" : "pointer",
-    opacity: doc.status === "Valid" ? 0.5 : 1
-  }}
-  disabled={doc.status === "Valid"}
-  onClick={() => {
-    if (doc.status === "Valid") return;
-    reprocessDocument(doc.id);
-  }}
->
-  Reprocess Document
-</button>
-'@
+if (-not $content.Contains($old)) {
+    Write-Host "❌ Expected line not found. Search manually in /extract-requirements."
+    exit 1
+}
 
-Set-Content $path $content -Encoding UTF8
+$content = $content.Replace($old, $new)
+Set-Content $mainFile $content -Encoding UTF8
 
-Write-Host "✅ Reprocess button updated"
+Write-Host "✅ Updated /extract-requirements to use runtime['top_k']"

@@ -224,8 +224,7 @@ export default function Documents() {
                               year: "numeric",
                               month: "short",
                               day: "2-digit",
-                              hour: "numeric",
-                              minute: "2-digit"
+                              
                             })
                           : "—"}
                       </td>

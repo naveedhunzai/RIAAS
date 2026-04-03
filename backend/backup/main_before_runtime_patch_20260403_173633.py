@@ -84,7 +84,6 @@ def compute_file_hash(file_path: Path) -> str:
 
 @app.post("/ingest")
 def ingest():
-    runtime = get_runtime_settings()
     folder = Path(RAW_DOCS_DIR)
     pdf_files = list(folder.glob("*.pdf"))
 
@@ -142,11 +141,7 @@ def ingest():
             detail="No readable PDF text found in new or changed files.",
         )
 
-    chunks = chunk_documents(
-        docs,
-        chunk_size=runtime["chunk_size"],
-        overlap=runtime["chunk_overlap"],
-    )
+    chunks = chunk_documents(docs, chunk_size=800, overlap=150)
     embeddings = embed_chunks(chunks)
 
     collection = get_collection()
@@ -166,24 +161,17 @@ def ingest():
         )
     # === AUTO REQUIREMENT EXTRACTION ===
     try:
-        should_extract = runtime["auto_extract"] and bool(new_files or changed_files)
+        should_extract = bool(new_files or changed_files)
 
         if should_extract:
             auto_topic = "all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations"
 
-            contexts, citations = retrieve_context(
-                auto_topic,
-                top_k=runtime["max_context_chunks"],
-            )
+            contexts, citations = retrieve_context(auto_topic, top_k=50)
 
             if not contexts:
                 print("ℹ️ Auto extraction skipped: no context retrieved after ingestion.")
             else:
-                extracted = extract_requirements_from_context(
-                    auto_topic,
-                    contexts,
-                    model=runtime["model"],
-                )
+                extracted = extract_requirements_from_context(auto_topic, contexts, model="gemma3:4b")
                 cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
 
                 auto_saved_ids = []
@@ -231,17 +219,14 @@ def ingested_documents(limit: int = 200):
 
 
 @app.get("/ask")
-def ask(question: str, top_k: int | None = None):
+def ask(question: str, top_k: int = 5):
     if not question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    runtime = get_runtime_settings()
-    resolved_top_k = int(resolve_param(top_k, runtime["top_k"]))
-
     return {
         "question": question,
-        "top_k": resolved_top_k,
-        "results": retrieve_clean(question, top_k=resolved_top_k),
+        "top_k": top_k,
+        "results": retrieve_clean(question, top_k=top_k),
     }
 
 
@@ -251,11 +236,7 @@ def answer(req: AnswerRequest):
     if not q:
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    runtime = get_runtime_settings()
-    resolved_top_k = int(resolve_param(req.top_k, runtime["top_k"]))
-    resolved_model = str(resolve_param(req.model, runtime["model"]))
-
-    contexts, citations = retrieve_context(q, top_k=resolved_top_k)
+    contexts, citations = retrieve_context(q, top_k=req.top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -272,13 +253,13 @@ def answer(req: AnswerRequest):
         "ANSWER:"
     )
 
-    response_text = ollama_generate(prompt, model=resolved_model)
+    response_text = ollama_generate(prompt, model=req.model)
     sources = [f"{c['source']} p{c['page']} ([{c['id']}])" for c in citations]
 
     return {
         "question": q,
-        "model": resolved_model,
-        "top_k": resolved_top_k,
+        "model": req.model,
+        "top_k": req.top_k,
         "answer": response_text,
         "citations": citations,
         "sources": sources,
@@ -291,15 +272,11 @@ def extract_requirements(req: ExtractRequirementsRequest):
     if not topic:
         raise HTTPException(status_code=400, detail="topic cannot be empty")
 
-    runtime = get_runtime_settings()
-    resolved_top_k = int(resolve_param(req.top_k, runtime["top_k"]))
-    resolved_model = str(resolve_param(req.model, runtime["model"]))
-
-    contexts, citations = retrieve_context(topic, top_k=resolved_top_k)
+    contexts, citations = retrieve_context(topic, top_k=req.top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
-    extracted = extract_requirements_from_context(topic, contexts, model=resolved_model)
+    extracted = extract_requirements_from_context(topic, contexts, model=req.model)
 
     cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
 
@@ -326,8 +303,6 @@ def extract_requirements(req: ExtractRequirementsRequest):
 
     return {
         "topic": topic,
-        "model": resolved_model,
-        "top_k": resolved_top_k,
         "retrieved_citations": citations,
         "extracted_count": len(extracted),
         "saved_requirement_ids": saved_ids,
@@ -795,8 +770,6 @@ def health():
         "vector_db": "Connected",
         "database": "Connected"
     }
-
-
 
 
 
