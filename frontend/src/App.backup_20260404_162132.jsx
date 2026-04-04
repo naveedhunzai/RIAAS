@@ -74,8 +74,8 @@ function App() {
             <div
   style={{
     width: "100%",
-    maxWidth: "100%",
-    margin: 0,
+    maxWidth: 1680,
+    margin: "0 auto",
     minHeight: "100%"
   }}
 >
@@ -96,5 +96,4 @@ function App() {
 }
 
 export default App;
-
 

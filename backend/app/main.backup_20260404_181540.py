@@ -1,7 +1,6 @@
 from pathlib import Path
 import json
 import hashlib
-import re
 import os
 
 from fastapi import FastAPI, HTTPException
@@ -58,31 +57,6 @@ from app.db.sqlite_db import (
     delete_ingested_document_by_id,
 )
 
-
-def _filter_contexts_by_source(contexts: list[str], citations: list[dict], source: str | None = None):
-    if not source:
-        return contexts, citations
-
-    pairs = []
-    for ctx, cit in zip(contexts, citations):
-        if str(cit.get("source") or "").strip() == str(source).strip():
-            pairs.append((ctx, cit))
-
-    if not pairs:
-        return [], []
-
-    filtered_contexts = []
-    filtered_citations = []
-
-    for idx, (ctx, cit) in enumerate(pairs, start=1):
-        ctx_text = re.sub(r"^\[\d+\]\s*", "", str(ctx).lstrip())
-        filtered_contexts.append(f"[{idx}] {ctx_text}")
-
-        new_cit = dict(cit)
-        new_cit["id"] = idx
-        filtered_citations.append(new_cit)
-
-    return filtered_contexts, filtered_citations
 app = FastAPI(title="RIAAS Backend", version="0.1.0")
 
 
@@ -257,7 +231,7 @@ def ingested_documents(limit: int = 200):
 
 
 @app.get("/ask")
-def ask(question: str, top_k: int | None = None, source: str | None = None):
+def ask(question: str, top_k: int | None = None):
     if not question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
@@ -282,7 +256,6 @@ def answer(req: AnswerRequest):
     resolved_model = str(resolve_param(req.model, runtime["model"]))
 
     contexts, citations = retrieve_context(q, top_k=resolved_top_k)
-    contexts, citations = _filter_contexts_by_source(contexts, citations, source)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -313,7 +286,7 @@ def answer(req: AnswerRequest):
 
 
 @app.post("/extract-requirements")
-def extract_requirements(req: ExtractRequirementsRequest, source: str | None = None):
+def extract_requirements(req: ExtractRequirementsRequest):
     topic = (req.topic or "").strip()
     if not topic:
         raise HTTPException(status_code=400, detail="topic cannot be empty")
@@ -323,7 +296,6 @@ def extract_requirements(req: ExtractRequirementsRequest, source: str | None = N
     resolved_model = str(resolve_param(req.model, runtime["model"]))
 
     contexts, citations = retrieve_context(topic, top_k=resolved_top_k)
-    contexts, citations = _filter_contexts_by_source(contexts, citations, source)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -823,7 +795,6 @@ def health():
         "vector_db": "Connected",
         "database": "Connected"
     }
-
 
 
 

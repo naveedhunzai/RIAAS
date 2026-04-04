@@ -538,8 +538,7 @@ export default function Requirements() {
           display: "grid",
           gridTemplateRows: "auto auto auto minmax(0, 1fr)",
           gap: 16,
-          height: "calc(100vh - 32px)",
-          minHeight: 0,
+          minHeight: "calc(100vh - 32px)",
           background: "#ffffff",
           border: "1px solid #e5e7eb",
           borderRadius: 18,
@@ -720,8 +719,6 @@ export default function Requirements() {
             gap: 16,
             minHeight: 0,
             overflow: "hidden",
-            height: "100%",
-            alignItems: "stretch",
           }}
         >
           <div
@@ -733,7 +730,6 @@ export default function Requirements() {
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
-              height: "100%",
             }}
           >
             <div
@@ -1072,8 +1068,6 @@ export default function Requirements() {
               gap: 10,
               minHeight: 0,
               overflowY: "auto",
-              height: "100%",
-              alignContent: "start",
             }}
           >
             <div style={{ fontWeight: 900, color: "#111827" }}>Requirement Details</div>

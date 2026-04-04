@@ -302,7 +302,6 @@ export default function Requirements() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [requirements, setRequirements] = useState([]);
-  const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [actions, setActions] = useState([]);
 
   const [selectedId, setSelectedId] = useState(null);
@@ -425,15 +424,6 @@ export default function Requirements() {
     return ["All", ...Array.from(set).sort()];
   }, [requirements]);
 
-  const documents = useMemo(() => {
-    const set = new Set();
-    requirements.forEach((r) => {
-      const src = r?.source ?? "";
-      if (src) set.add(String(src));
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [requirements]);
-
   const selectedHasActions = useMemo(() => {
     if (selectedId === null || selectedId === undefined) return false;
     return hasGeneratedActions(actions, selectedId);
@@ -456,11 +446,6 @@ export default function Requirements() {
         if (modality !== "All" && String(r.__modality) !== String(modality)) return false;
         if (status !== "All" && String(r.__status) !== String(status)) return false;
 
-        if (selectedDocuments.length > 0) {
-          const source = String(r.source ?? "");
-          if (!selectedDocuments.includes(source)) return false;
-        }
-
         if (!query) return true;
 
         const haystack = [
@@ -478,7 +463,7 @@ export default function Requirements() {
 
         return haystack.includes(query);
       });
-  }, [requirements, q, category, modality, status, selectedDocuments]);
+  }, [requirements, q, category, modality, status]);
 
   async function generateActionsFor(reqId) {
     if (reqId === null || reqId === undefined) return;
@@ -538,8 +523,7 @@ export default function Requirements() {
           display: "grid",
           gridTemplateRows: "auto auto auto minmax(0, 1fr)",
           gap: 16,
-          height: "calc(100vh - 32px)",
-          minHeight: 0,
+          minHeight: "calc(100vh - 32px)",
           background: "#ffffff",
           border: "1px solid #e5e7eb",
           borderRadius: 18,
@@ -720,8 +704,6 @@ export default function Requirements() {
             gap: 16,
             minHeight: 0,
             overflow: "hidden",
-            height: "100%",
-            alignItems: "stretch",
           }}
         >
           <div
@@ -733,183 +715,11 @@ export default function Requirements() {
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
-              height: "100%",
             }}
           >
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(340px, 430px) minmax(260px, 1fr)",
-                gap: 10,
-                marginBottom: 14,
-                padding: 10,
-                border: "1px solid #e5e7eb",
-                borderRadius: 14,
-                background: "#ffffff",
-                alignItems: "start",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gap: 8,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 6,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ fontWeight: 800, color: "#111827" }}>
-                    Documents
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDocuments(documents)}
-                      disabled={documents.length === 0}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #d1d5db",
-                        background: "#ffffff",
-                        color: "#111827",
-                        cursor: documents.length === 0 ? "not-allowed" : "pointer",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Select All
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDocuments([])}
-                      disabled={selectedDocuments.length === 0}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #d1d5db",
-                        background: "#ffffff",
-                        color: "#111827",
-                        cursor: selectedDocuments.length === 0 ? "not-allowed" : "pointer",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 8,
-                    maxHeight: 132,
-                    overflowY: "auto",
-                    paddingRight: 4,
-                  }}
-                >
-                  {documents.length > 0 ? (
-                    documents.map((doc) => {
-                      const checked = selectedDocuments.includes(doc);
-
-                      return (
-                        <label
-                          key={doc}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            color: "#111827",
-                            fontSize: 13,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedDocuments((prev) =>
-                                  prev.includes(doc) ? prev : [...prev, doc]
-                                );
-                              } else {
-                                setSelectedDocuments((prev) =>
-                                  prev.filter((d) => d !== doc)
-                                );
-                              }
-                            }}
-                          />
-                          <span>{doc}</span>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div style={{ color: "#6b7280", fontSize: 14 }}>
-                      No documents available.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 14,
-                  background: "#f9fafb",
-                  padding: 12,
-                  minHeight: 132,
-                  display: "grid",
-                  alignContent: "start",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 800,
-                    color: "#4b5563",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.03em",
-                  }}
-                >
-                  Showing requirements for
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    lineHeight: 1.45,
-                    color: "#111827",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {selectedDocuments.length > 0
-                    ? selectedDocuments.join(", ")
-                    : "All documents"}
-                </div>
-
-                <div style={{ color: "#6b7280", fontSize: 12 }}>
-                  {selectedDocuments.length > 0
-                    ? `${selectedDocuments.length} selected`
-                    : `${documents.length} available`}
-                </div>
-              </div>
-            </div>
-            <div
-              style={{
-                padding: 10,
+                padding: 14,
                 borderBottom: "1px solid #f0f0f0",
                 display: "flex",
                 justifyContent: "space-between",
@@ -1072,8 +882,6 @@ export default function Requirements() {
               gap: 10,
               minHeight: 0,
               overflowY: "auto",
-              height: "100%",
-              alignContent: "start",
             }}
           >
             <div style={{ fontWeight: 900, color: "#111827" }}>Requirement Details</div>
@@ -1096,5 +904,3 @@ export default function Requirements() {
     </div>
   );
 }
-
-

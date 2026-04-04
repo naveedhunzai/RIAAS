@@ -538,8 +538,7 @@ export default function Requirements() {
           display: "grid",
           gridTemplateRows: "auto auto auto minmax(0, 1fr)",
           gap: 16,
-          height: "calc(100vh - 32px)",
-          minHeight: 0,
+          minHeight: "calc(100vh - 32px)",
           background: "#ffffff",
           border: "1px solid #e5e7eb",
           borderRadius: 18,
@@ -720,8 +719,6 @@ export default function Requirements() {
             gap: 16,
             minHeight: 0,
             overflow: "hidden",
-            height: "100%",
-            alignItems: "stretch",
           }}
         >
           <div
@@ -733,16 +730,15 @@ export default function Requirements() {
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
-              height: "100%",
             }}
           >
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(340px, 430px) minmax(260px, 1fr)",
-                gap: 10,
+                gap: 14,
                 marginBottom: 14,
-                padding: 10,
+                padding: 14,
                 border: "1px solid #e5e7eb",
                 borderRadius: 14,
                 background: "#ffffff",
@@ -752,7 +748,7 @@ export default function Requirements() {
               <div
                 style={{
                   display: "grid",
-                  gap: 8,
+                  gap: 12,
                 }}
               >
                 <div
@@ -760,7 +756,7 @@ export default function Requirements() {
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    gap: 6,
+                    gap: 10,
                     flexWrap: "wrap",
                   }}
                 >
@@ -780,7 +776,7 @@ export default function Requirements() {
                       onClick={() => setSelectedDocuments(documents)}
                       disabled={documents.length === 0}
                       style={{
-                        padding: "6px 10px",
+                        padding: "8px 12px",
                         borderRadius: 10,
                         border: "1px solid #d1d5db",
                         background: "#ffffff",
@@ -797,7 +793,7 @@ export default function Requirements() {
                       onClick={() => setSelectedDocuments([])}
                       disabled={selectedDocuments.length === 0}
                       style={{
-                        padding: "6px 10px",
+                        padding: "8px 12px",
                         borderRadius: 10,
                         border: "1px solid #d1d5db",
                         background: "#ffffff",
@@ -815,7 +811,7 @@ export default function Requirements() {
                   style={{
                     display: "grid",
                     gap: 8,
-                    maxHeight: 132,
+                    maxHeight: 180,
                     overflowY: "auto",
                     paddingRight: 4,
                   }}
@@ -830,9 +826,9 @@ export default function Requirements() {
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: 6,
+                            gap: 10,
                             color: "#111827",
-                            fontSize: 13,
+                            fontSize: 14,
                             cursor: "pointer",
                           }}
                         >
@@ -868,16 +864,16 @@ export default function Requirements() {
                   border: "1px solid #e5e7eb",
                   borderRadius: 14,
                   background: "#f9fafb",
-                  padding: 12,
-                  minHeight: 132,
+                  padding: 16,
+                  minHeight: 180,
                   display: "grid",
                   alignContent: "start",
-                  gap: 6,
+                  gap: 10,
                 }}
               >
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 800,
                     color: "#4b5563",
                     textTransform: "uppercase",
@@ -889,8 +885,8 @@ export default function Requirements() {
 
                 <div
                   style={{
-                    fontSize: 13,
-                    lineHeight: 1.45,
+                    fontSize: 14,
+                    lineHeight: 1.7,
                     color: "#111827",
                     wordBreak: "break-word",
                   }}
@@ -909,7 +905,7 @@ export default function Requirements() {
             </div>
             <div
               style={{
-                padding: 10,
+                padding: 14,
                 borderBottom: "1px solid #f0f0f0",
                 display: "flex",
                 justifyContent: "space-between",
@@ -1072,8 +1068,6 @@ export default function Requirements() {
               gap: 10,
               minHeight: 0,
               overflowY: "auto",
-              height: "100%",
-              alignContent: "start",
             }}
           >
             <div style={{ fontWeight: 900, color: "#111827" }}>Requirement Details</div>
@@ -1096,5 +1090,4 @@ export default function Requirements() {
     </div>
   );
 }
-
 

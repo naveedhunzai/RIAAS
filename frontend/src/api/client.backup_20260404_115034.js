@@ -128,20 +128,7 @@ export const api = {
   // Backward/alternate naming used by some pages
   createActionsForRequirement: (reqId, payload = {}) =>
     request(`/requirements/${reqId}/actions`, { method: "POST", body: payload }),
-
-  answer: ({ question, top_k, model }) =>
-    request(`/answer`, {
-      method: "POST",
-      body: {
-        question,
-        top_k,
-        model,
-      },
-    }),
-  ask: ({ question, top_k }) =>
-    request(`/ask${qs({ question, top_k })}`),
 };
 
 export { API_BASE };
-
 

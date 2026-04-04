@@ -112,15 +112,15 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         "You extract compliance REQUIREMENTS from regulatory text.\n"
         "Return ONLY valid JSON as a single JSON array. No markdown. No commentary.\n\n"
         "Rules:\n"
-        "- Return up to 100 objects.\n"
-        "- Each requirement_text should be a clear, complete compliance statement. You may rewrite for clarity.\n"
-        "- Extract ALL compliance-related statements, including obligations, expectations, controls, and procedures.\n"
+        "- Return up to 25 objects.\n"
+        "- Each requirement_text must be one short complete sentence.\n"
+        "- Extract ONLY explicit obligations or prohibitions.\n"
         "- modality must be one of: MUST, SHALL, PROHIBITED, SHOULD.\n"
         "- category must be one of: Reporting, Recordkeeping, Training, Monitoring, Governance, Other.\n"
         "- citation_id is REQUIRED for every object.\n"
         "- citation_id must be an integer and must exactly match one source block number from SOURCES.\n"
         "- Do not invent citation_id values.\n"
-        "- Always include the requirement. If citation is unclear, assign the closest matching source.\n\n"
+        "- If a requirement cannot be tied to a source block number, do not include it.\n\n"
         "JSON schema:\n"
         "[\n"
         "  {\"requirement_text\":\"Sentence.\",\"modality\":\"MUST\",\"category\":\"Governance\",\"citation_id\":1}\n"
@@ -142,29 +142,7 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         print("\n=== REQUIREMENT EXTRACTION PARSE ERROR START ===")
         print(str(e))
         print("=== REQUIREMENT EXTRACTION PARSE ERROR END ===\n")
-
-        print("\n⚠️ No JSON array returned. Falling back to raw-text line extraction.\n")
-
-        lines = []
-        for line in raw.splitlines():
-            text = " ".join(str(line).split()).strip()
-
-            if len(text) < 40:
-                continue
-
-            if text.startswith("[") or text.startswith("]") or text.startswith("{") or text.startswith("}"):
-                continue
-
-            lines.append(text)
-
-        data = []
-        for i, text in enumerate(lines[:50], start=1):
-            data.append({
-                "requirement_text": text,
-                "modality": "SHOULD",
-                "category": "Other",
-                "citation_id": i
-            })
+        return []
 
     print("\n=== PARSED REQUIREMENTS START ===")
     print(data)
@@ -294,7 +272,5 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
         })
 
     return cleaned
-
-
 
 

@@ -142,29 +142,7 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         print("\n=== REQUIREMENT EXTRACTION PARSE ERROR START ===")
         print(str(e))
         print("=== REQUIREMENT EXTRACTION PARSE ERROR END ===\n")
-
-        print("\n⚠️ No JSON array returned. Falling back to raw-text line extraction.\n")
-
-        lines = []
-        for line in raw.splitlines():
-            text = " ".join(str(line).split()).strip()
-
-            if len(text) < 40:
-                continue
-
-            if text.startswith("[") or text.startswith("]") or text.startswith("{") or text.startswith("}"):
-                continue
-
-            lines.append(text)
-
-        data = []
-        for i, text in enumerate(lines[:50], start=1):
-            data.append({
-                "requirement_text": text,
-                "modality": "SHOULD",
-                "category": "Other",
-                "citation_id": i
-            })
+        return []
 
     print("\n=== PARSED REQUIREMENTS START ===")
     print(data)
@@ -294,7 +272,6 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
         })
 
     return cleaned
-
 
 
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 const pageStyle = {
   display: "grid",
-  gap: 14,
+  gap: 12,
   width: "100%",
   minWidth: 0
 };
@@ -11,27 +11,14 @@ const heroStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap"
-};
-
-const heroTextStyle = {
-  display: "grid",
-  gap: 6
 };
 
 const topGridStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: 12,
-  width: "100%",
-  minWidth: 0
-};
-
-const statusGridStyle = {
-  display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 12,
+  gap: 10,
   width: "100%",
   minWidth: 0
 };
@@ -39,7 +26,7 @@ const statusGridStyle = {
 const midGridStyle = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1.7fr) minmax(320px, 1fr)",
-  gap: 12,
+  gap: 10,
   width: "100%",
   minWidth: 0,
   alignItems: "start"
@@ -48,90 +35,58 @@ const midGridStyle = {
 const bottomGridStyle = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
-  gap: 12,
+  gap: 10,
   width: "100%",
   minWidth: 0,
   alignItems: "start"
 };
 
+const dividerStyle = {
+  height: 1,
+  background: "#e5e7eb",
+  width: "100%",
+  margin: "2px 0 2px 0"
+};
+
 const cardStyle = {
   background: "#ffffff",
   border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 16,
-  boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 8px 24px rgba(16,24,40,0.04)",
+  borderRadius: 18,
+  padding: 14,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
   minWidth: 0
-};
-
-const softCardStyle = {
-  ...cardStyle,
-  background: "linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%)"
-};
-
-const kpiCardStyle = {
-  ...softCardStyle,
-  display: "grid",
-  gap: 10
 };
 
 const titleStyle = {
   margin: 0,
   fontSize: 24,
   color: "#111827",
-  fontWeight: 800,
-  letterSpacing: "-0.02em"
+  fontWeight: 800
 };
 
 const subtitleStyle = {
-  margin: 0,
+  margin: "8px 0 0 0",
   color: "#6b7280",
-  fontSize: 13,
-  lineHeight: 1.5,
-  maxWidth: 760
-};
-
-const eyebrowStyle = {
-  margin: 0,
-  fontSize: 11,
-  fontWeight: 800,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "#6366f1"
+  fontSize: 14
 };
 
 const statValueStyle = {
-  fontSize: 30,
+  fontSize: 28,
   fontWeight: 800,
   color: "#111827",
-  margin: 0,
-  lineHeight: 1
+  margin: "8px 0 4px 0"
 };
 
 const statLabelStyle = {
-  fontSize: 13,
+  fontSize: 14,
   color: "#6b7280"
-};
-
-const kpiTitleStyle = {
-  fontSize: 13,
-  color: "#374151",
-  fontWeight: 700,
-  lineHeight: 1.35
 };
 
 const sectionTitleStyle = {
   margin: 0,
-  fontSize: 15,
+  fontSize: 16,
   fontWeight: 700,
   color: "#111827"
-};
-
-const sectionHeaderStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  marginBottom: 14
 };
 
 const rowStyle = {
@@ -139,9 +94,9 @@ const rowStyle = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
-  padding: "10px 0",
+  padding: "12px 0",
   borderBottom: "1px solid #f3f4f6",
-  fontSize: 13,
+  fontSize: 14,
   color: "#374151"
 };
 
@@ -151,10 +106,8 @@ const buttonStyle = {
   border: "1px solid #d1d5db",
   background: "#ffffff",
   cursor: "pointer",
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#111827",
-  boxShadow: "0 1px 2px rgba(16,24,40,0.04)"
+  fontSize: 14,
+  fontWeight: 600
 };
 
 const pillBaseStyle = {
@@ -162,8 +115,8 @@ const pillBaseStyle = {
   alignItems: "center",
   padding: "6px 10px",
   borderRadius: 999,
-  fontSize: 11,
-  fontWeight: 800,
+  fontSize: 12,
+  fontWeight: 700,
   border: "1px solid transparent",
   flexShrink: 0
 };
@@ -173,12 +126,6 @@ const scrollListStyle = {
   overflowY: "auto",
   overflowX: "hidden",
   paddingRight: 6
-};
-
-const dividerStyle = {
-  height: 1,
-  background: "#eef2f7",
-  width: "100%"
 };
 
 function getStatusPillStyle(status) {
@@ -319,20 +266,6 @@ function Dashboard() {
     return map;
   }, [actions]);
 
-  const documentsWithRequirements = useMemo(() => {
-    return Object.keys(requirementSourceMap).filter((k) => k && k !== "Unknown").length;
-  }, [requirementSourceMap]);
-
-  const requirementsWithActions = useMemo(() => {
-    return Object.keys(actionRequirementMap).length;
-  }, [actionRequirementMap]);
-
-  const completionRate = useMemo(() => {
-    return metrics.totalActions > 0
-      ? `${Math.round((metrics.done / metrics.totalActions) * 100)}%`
-      : "0%";
-  }, [metrics]);
-
   const topDocuments = useMemo(() => {
     const docMap = {};
 
@@ -379,57 +312,30 @@ function Dashboard() {
     {
       label: "Open",
       value: metrics.open,
-      bg: "#fff5f5",
+      bg: "#fef2f2",
       border: "#fecaca",
-      color: "#b91c1c",
-      help: "Waiting for action"
+      color: "#b91c1c"
     },
     {
       label: "In Progress",
       value: metrics.inProgress,
-      bg: "#f5f9ff",
+      bg: "#eff6ff",
       border: "#bfdbfe",
-      color: "#1d4ed8",
-      help: "Currently being worked"
+      color: "#1d4ed8"
     },
     {
       label: "Done",
       value: metrics.done,
-      bg: "#f2fbf6",
+      bg: "#ecfdf5",
       border: "#a7f3d0",
-      color: "#047857",
-      help: "Completed items"
-    }
-  ];
-
-  const kpiCards = [
-    {
-      title: "Tracked Documents",
-      value: metrics.totalDocuments,
-      description: "All documents in ingestion registry"
-    },
-    {
-      title: "Extracted Requirements",
-      value: metrics.totalRequirements,
-      description: "Compliance obligations identified"
-    },
-    {
-      title: "Generated Actions",
-      value: metrics.totalActions,
-      description: "Follow-up and remediation tasks"
-    },
-    {
-      title: "Active Documents",
-      value: metrics.activeDocuments,
-      description: "Currently active and available"
+      color: "#047857"
     }
   ];
 
   return (
     <div style={pageStyle}>
       <div style={heroStyle}>
-        <div style={heroTextStyle}>
-          <div style={eyebrowStyle}>RIAAS Console</div>
+        <div>
           <h2 style={titleStyle}>Dashboard</h2>
           <p style={subtitleStyle}>
             Compliance intelligence overview across documents, requirements, actions, and system health.
@@ -442,64 +348,117 @@ function Dashboard() {
       </div>
 
       <div style={topGridStyle}>
-        {kpiCards.map((card) => (
-          <div key={card.title} style={kpiCardStyle}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 12
-              }}
-            >
-              <div style={kpiTitleStyle}>{card.title}</div>
-              <div style={statValueStyle}>{loading ? "..." : card.value}</div>
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12
+            }}
+          >
+            <div style={{ ...statLabelStyle, color: "#374151", fontWeight: 700 }}>
+              Tracked Documents
             </div>
-
-            <div style={statLabelStyle}>{card.description}</div>
+            <div style={{ ...statValueStyle, margin: 0, lineHeight: 1 }}>
+              {loading ? "..." : metrics.totalDocuments}
+            </div>
           </div>
-        ))}
+          <div style={{ ...statLabelStyle, marginTop: 10 }}>
+            All documents in ingestion registry
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12
+            }}
+          >
+            <div style={{ ...statLabelStyle, color: "#374151", fontWeight: 700 }}>
+              Extracted Requirements
+            </div>
+            <div style={{ ...statValueStyle, margin: 0, lineHeight: 1 }}>
+              {loading ? "..." : metrics.totalRequirements}
+            </div>
+          </div>
+          <div style={{ ...statLabelStyle, marginTop: 10 }}>
+            Compliance obligations identified
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12
+            }}
+          >
+            <div style={{ ...statLabelStyle, color: "#374151", fontWeight: 700 }}>
+              Generated Actions
+            </div>
+            <div style={{ ...statValueStyle, margin: 0, lineHeight: 1 }}>
+              {loading ? "..." : metrics.totalActions}
+            </div>
+          </div>
+          <div style={{ ...statLabelStyle, marginTop: 10 }}>
+            Follow-up and remediation tasks
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12
+            }}
+          >
+            <div style={{ ...statLabelStyle, color: "#374151", fontWeight: 700 }}>
+              Active Documents
+            </div>
+            <div style={{ ...statValueStyle, margin: 0, lineHeight: 1 }}>
+              {loading ? "..." : metrics.activeDocuments}
+            </div>
+          </div>
+          <div style={{ ...statLabelStyle, marginTop: 10 }}>
+            Currently active and available
+          </div>
+        </div>
       </div>
 
       <div style={dividerStyle} />
 
-      <div style={statusGridStyle}>
+      <div style={topGridStyle}>
         {actionStatusCards.map((card) => (
           <div
             key={card.label}
             style={{
-              ...softCardStyle,
+              ...cardStyle,
               background: card.bg,
-              borderColor: card.border,
-              display: "grid",
-              gap: 8
+              borderColor: card.border
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12
-              }}
-            >
-              <div style={{ ...kpiTitleStyle, color: card.color }}>{card.label}</div>
-              <div style={{ ...statValueStyle, color: card.color }}>
-                {loading ? "..." : card.value}
-              </div>
+            <div style={{ ...statLabelStyle, color: card.color }}>{card.label}</div>
+            <div style={{ ...statValueStyle, color: card.color }}>
+              {loading ? "..." : card.value}
             </div>
-
-            <div style={{ ...statLabelStyle, color: card.color }}>{card.help}</div>
+            <div style={{ ...statLabelStyle, color: card.color }}>
+              Action items in this status
+            </div>
           </div>
         ))}
       </div>
 
       <div style={midGridStyle}>
-        <div style={softCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h3 style={sectionTitleStyle}>Top Source Documents</h3>
-            <span style={{ ...statLabelStyle, fontSize: 12 }}>{topDocuments.length} shown</span>
-          </div>
+        <div style={cardStyle}>
+          <h3 style={{ ...sectionTitleStyle, marginBottom: 16 }}>Top Source Documents</h3>
 
           {topDocuments.length === 0 ? (
             <div style={{ color: "#6b7280", fontSize: 14 }}>No document metrics available.</div>
@@ -531,11 +490,9 @@ function Dashboard() {
           )}
         </div>
 
-        <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
-          <div style={softCardStyle}>
-            <div style={sectionHeaderStyle}>
-              <h3 style={sectionTitleStyle}>System Status</h3>
-            </div>
+        <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
+          <div style={cardStyle}>
+            <h3 style={{ ...sectionTitleStyle, marginBottom: 16 }}>System Status</h3>
 
             <div style={rowStyle}>
               <span>Backend</span>
@@ -551,33 +508,34 @@ function Dashboard() {
             </div>
           </div>
 
-          <div style={softCardStyle}>
-            <div style={sectionHeaderStyle}>
-              <h3 style={sectionTitleStyle}>Quick Summary</h3>
-            </div>
+          <div style={cardStyle}>
+            <h3 style={{ ...sectionTitleStyle, marginBottom: 16 }}>Quick Summary</h3>
 
             <div style={rowStyle}>
               <span>Documents with requirements</span>
-              <strong>{documentsWithRequirements}</strong>
+              <strong>
+                {Object.keys(requirementSourceMap).filter((k) => k && k !== "Unknown").length}
+              </strong>
             </div>
             <div style={rowStyle}>
               <span>Requirements with actions</span>
-              <strong>{requirementsWithActions}</strong>
+              <strong>{Object.keys(actionRequirementMap).length}</strong>
             </div>
             <div style={{ ...rowStyle, borderBottom: "none" }}>
               <span>Action completion rate</span>
-              <strong>{completionRate}</strong>
+              <strong>
+                {metrics.totalActions > 0
+                  ? `${Math.round((metrics.done / metrics.totalActions) * 100)}%`
+                  : "0%"}
+              </strong>
             </div>
           </div>
         </div>
       </div>
 
       <div style={bottomGridStyle}>
-        <div style={softCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h3 style={sectionTitleStyle}>Recent Documents</h3>
-            <span style={{ ...statLabelStyle, fontSize: 12 }}>{recentDocuments.length} shown</span>
-          </div>
+        <div style={cardStyle}>
+          <h3 style={{ ...sectionTitleStyle, marginBottom: 16 }}>Recent Documents</h3>
 
           {recentDocuments.length === 0 ? (
             <div style={{ color: "#6b7280", fontSize: 14 }}>No recent documents found.</div>
@@ -609,26 +567,20 @@ function Dashboard() {
           )}
         </div>
 
-        <div style={softCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h3 style={sectionTitleStyle}>Operational Snapshot</h3>
-          </div>
+        <div style={cardStyle}>
+          <h3 style={{ ...sectionTitleStyle, marginBottom: 16 }}>Action Status Detail</h3>
 
           <div style={rowStyle}>
-            <span>Open actions</span>
+            <span>Open</span>
             <span style={getStatusPillStyle("Open")}>{metrics.open}</span>
           </div>
           <div style={rowStyle}>
-            <span>In-progress actions</span>
+            <span>In Progress</span>
             <span style={getStatusPillStyle("In Progress")}>{metrics.inProgress}</span>
           </div>
-          <div style={rowStyle}>
-            <span>Completed actions</span>
-            <span style={getStatusPillStyle("Done")}>{metrics.done}</span>
-          </div>
           <div style={{ ...rowStyle, borderBottom: "none" }}>
-            <span>Document coverage</span>
-            <strong>{documentsWithRequirements}/{metrics.totalDocuments || 0}</strong>
+            <span>Done</span>
+            <span style={getStatusPillStyle("Done")}>{metrics.done}</span>
           </div>
         </div>
       </div>
@@ -637,3 +589,5 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
+
