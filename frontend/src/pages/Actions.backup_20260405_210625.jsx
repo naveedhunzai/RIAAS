@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  primaryButton,
-  secondaryButton,
-  subtleButton,
-  disabledButton
-} from "../styles/ui";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -116,6 +110,43 @@ function fmtDate(s) {
   return new Date(t).toLocaleDateString();
 }
 
+
+const buttonBase = {
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid #d0d7de",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 600,
+  background: "#fff",
+  color: "#111827",
+  transition: "all 0.2s ease",
+};
+
+const primaryButton = {
+  ...buttonBase,
+  background: "#111827",
+  color: "#fff",
+  border: "1px solid #111827",
+};
+
+const secondaryButton = {
+  ...buttonBase,
+  background: "#fff",
+  color: "#111827",
+};
+
+const subtleButton = {
+  ...buttonBase,
+  background: "#f8fafc",
+  color: "#334155",
+  border: "1px solid #e2e8f0",
+};
+
+const disabledButton = {
+  opacity: 0.5,
+  cursor: "not-allowed",
+};
 
 export default function Actions() {
   const navigate = useNavigate();
@@ -574,4 +605,3 @@ export default function Actions() {
     </div>
   );
 }
-

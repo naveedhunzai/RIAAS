@@ -1,11 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  primaryButton,
-  secondaryButton,
-  subtleButton,
-  disabledButton
-} from "../styles/ui";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -115,7 +109,6 @@ function fmtDate(s) {
   if (!t) return String(s);
   return new Date(t).toLocaleDateString();
 }
-
 
 export default function Actions() {
   const navigate = useNavigate();
@@ -299,7 +292,7 @@ export default function Actions() {
           <div style={{ fontSize: 12, marginBottom: 8, opacity: 0.8 }}>
             Showing actions for Requirement ID: <b>{reqIdFromUrl}</b>
             <button
-              style={{ ...subtleButton, marginLeft: 10 }}
+              style={{ marginLeft: 10 }}
               onClick={() => navigate("/actions")}
               title="Show all actions"
             >
@@ -435,16 +428,11 @@ export default function Actions() {
 
               <div style={{ display: "flex", gap: 8 }}>
                 {selected.reqId && (
-                  <button
-                    style={secondaryButton}
-                    onClick={() => navigate("/requirements?req_id=" + selected.reqId)}
-                  >
+                  <button onClick={() => navigate("/requirements?req_id=" + selected.reqId)}>
                     Open Requirement
                   </button>
                 )}
-                <button style={secondaryButton} onClick={closeModal}>
-                  Close
-                </button>
+                <button onClick={closeModal}>Close</button>
               </div>
             </div>
 
@@ -559,11 +547,7 @@ export default function Actions() {
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  style={!editable ? { ...primaryButton, ...disabledButton } : primaryButton}
-                  onClick={save}
-                  disabled={!editable}
-                >
+                <button onClick={save} disabled={!editable}>
                   Save
                 </button>
               </div>
@@ -574,4 +558,3 @@ export default function Actions() {
     </div>
   );
 }
-

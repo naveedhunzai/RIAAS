@@ -114,6 +114,26 @@ export default function Documents() {
       setWorkingKey("");
     }
   }
+  async function handleDeleteOrphan(source) {
+    const ok = window.confirm(`Delete orphan data for ${source}?`);
+    if (!ok) return;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/delete-orphan?source=${encodeURIComponent(source)}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete orphan data");
+      }
+
+      await response.json();
+      await loadDocs();
+    } catch (err) {
+      alert(err.message || "Error deleting orphan");
+    }
+  }
+
 
   useEffect(() => {
     loadDocs();
@@ -263,7 +283,11 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        {canReprocess ? (
+                        {isOrphan ? (
+                          <ActionButton onClick={() => handleDeleteOrphan(doc.source)}>
+                            Clear Orphan
+                          </ActionButton>
+                        ) : canReprocess ? (
                           <ActionButton
                             onClick={() => reprocessDocument(doc)}
                             disabled={workingKey === `reprocess-${doc.id}`}
@@ -285,4 +309,5 @@ export default function Documents() {
     </div>
   );
 }
+
 

@@ -177,18 +177,7 @@ def extract_requirements_from_context(question: str, contexts: list[str], model:
         if not isinstance(item, dict):
             continue
 
-        raw_text = (
-            item.get("requirement_text")
-            or item.get("description")
-            or item.get("text")
-            or ""
-        )
-
-        rt = " ".join(str(raw_text).split()).strip()
-
-        if rt.lower().startswith('"description":'):
-            rt = rt.split(":", 1)[-1].strip().strip('"').strip()
-
+        rt = " ".join(str(item.get("requirement_text") or "").split()).strip()
         if not rt:
             continue
 
@@ -286,7 +275,7 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
         if not isinstance(item, dict):
             continue
 
-        at = " ".join(str(item.get("action_text") or item.get("action_task") or "").split()).strip()
+        at = " ".join(str(item.get("action_text") or "").split()).strip()
         if not at:
             continue
 
@@ -305,8 +294,6 @@ def extract_actions_for_requirement(requirement_text: str, model: str = "gemma3:
         })
 
     return cleaned
-
-
 
 
 

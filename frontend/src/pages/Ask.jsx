@@ -97,6 +97,7 @@ export default function Ask() {
           padding: "10px 14px",
           borderRadius: 10,
           border: "1px solid #ddd",
+          background: loading ? "#93c5fd" : "#2563eb",
           cursor: "pointer",
           width: "fit-content",
         }}
