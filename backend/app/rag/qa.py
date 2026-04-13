@@ -52,3 +52,39 @@ def retrieve_context(question: str, top_k: int = 5):
 
     return contexts, citations
 
+def retrieve_context_for_source(question: str, source: str, top_k: int = 5):
+    """Context blocks + citations for one specific document source only."""
+    collection = get_collection()
+    r = collection.query(
+        query_texts=[question],
+        n_results=top_k,
+        where={"source": source},
+    )
+
+    docs = r.get("documents", [[]])[0]
+    metas = r.get("metadatas", [[]])[0]
+
+    seen = set()
+    contexts = []
+    citations = []
+
+    for doc, meta in zip(docs, metas):
+        src = meta.get("source")
+        page = meta.get("page")
+        key = (src, page)
+
+        if key in seen:
+            continue
+        seen.add(key)
+
+        text = (doc or "").strip()
+
+        contexts.append(
+            f"[{len(contexts)+1}] SOURCE: {src} | PAGE: {page}\n{text}"
+        )
+        citations.append(
+            {"id": len(citations)+1, "source": src, "page": page}
+        )
+
+    return contexts, citations
+

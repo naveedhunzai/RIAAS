@@ -25,7 +25,7 @@ from app.schemas.requests import (
 )
 
 from .routes import upload
-from .rag.qa import retrieve_context, retrieve_clean
+from .rag.qa import retrieve_context, retrieve_clean, retrieve_context_for_source
 from .rag.extractor import extract_requirements_from_context, extract_actions_for_requirement
 from app.rag.ollama_client import ollama_generate
 
@@ -197,22 +197,35 @@ def ingest():
         if should_extract:
             auto_topic = "all compliance requirements in the document including governance, monitoring, reporting, internal controls, CIP, and BSA program obligations"
 
-            contexts, citations = retrieve_context(
-                auto_topic,
-                top_k=runtime["max_context_chunks"],
-            )
+            # Demo-safe cap for responsiveness
+            demo_top_k = min(int(runtime["top_k"]), 12)
 
-            if not contexts:
-                print("ℹ️ Auto extraction skipped: no context retrieved after ingestion.")
-            else:
+            total_saved_ids = []
+            per_document_summary = []
+
+            for pdf_path in new_files:
+                source_name = pdf_path.name
+
+                contexts, citations = retrieve_context_for_source(
+                    auto_topic,
+                    source=source_name,
+                    top_k=demo_top_k,
+                )
+
+                if not contexts:
+                    per_document_summary.append(f"{source_name}: 0 extracted, 0 saved (no source-scoped context)")
+                    print(f"ℹ️ Auto extraction skipped for {source_name}: no source-scoped context retrieved.")
+                    continue
+
                 extracted = extract_requirements_from_context(
                     auto_topic,
                     contexts,
                     model=runtime["model"],
                 )
+
                 cite_map = {c["id"]: (c["source"], c["page"]) for c in citations}
 
-                auto_saved_ids = []
+                saved_ids = []
                 for r in extracted:
                     cid = r.get("citation_id")
                     source, page = (None, None)
@@ -231,15 +244,22 @@ def ingest():
                         page=page,
                         citation_id=cid,
                     )
-                    auto_saved_ids.append(new_id)
+                    saved_ids.append(new_id)
 
-                print(f"✅ Requirements extracted automatically after ingestion: {len(auto_saved_ids)} saved")
+                total_saved_ids.extend(saved_ids)
+                per_document_summary.append(
+                    f"{source_name}: {len(extracted)} extracted, {len(saved_ids)} saved"
+                )
+
+            print("✅ Per-document requirement extraction summary:")
+            for line in per_document_summary:
+                print(f"   - {line}")
+            print(f"✅ Requirements extracted automatically after ingestion: {len(total_saved_ids)} saved total")
         else:
             print("ℹ️ No new or changed files. Automatic extraction skipped.")
 
     except Exception as e:
         print(f"⚠️ Requirement extraction failed after ingestion: {e}")
-
     return {
         "message": "Incremental ingestion completed.",
         "loaded_pages": len(docs),
@@ -282,7 +302,7 @@ def answer(req: AnswerRequest):
     resolved_model = str(resolve_param(req.model, runtime["model"]))
 
     contexts, citations = retrieve_context(q, top_k=resolved_top_k)
-    source = getattr(req, "source", None)
+    source = source or getattr(req, "source", None)
     if source:
         contexts, citations = _filter_contexts_by_source(contexts, citations, source)
     if not contexts:
@@ -323,11 +343,11 @@ def extract_requirements(req: ExtractRequirementsRequest, source: str | None = N
     runtime = get_runtime_settings()
     resolved_top_k = int(resolve_param(req.top_k, runtime["top_k"]))
     resolved_model = str(resolve_param(req.model, runtime["model"]))
-
-    contexts, citations = retrieve_context(topic, top_k=resolved_top_k)
-    source = getattr(req, "source", None)
+    source = source or getattr(req, "source", None)
     if source:
-        contexts, citations = _filter_contexts_by_source(contexts, citations, source)
+        contexts, citations = retrieve_context_for_source(topic, source=source, top_k=resolved_top_k)
+    else:
+        contexts, citations = retrieve_context(topic, top_k=resolved_top_k)
     if not contexts:
         raise HTTPException(status_code=404, detail="No context retrieved. Run /ingest first.")
 
@@ -767,7 +787,25 @@ def reingest_document(doc_id: int):
         errors.append(f"cleanup_document_row: {e}")
 
     try:
-        ingest_result = ingest()
+        # --- SINGLE DOCUMENT INGEST ---
+        pdf_path = Path(file_path)
+        docs = load_pdf_files([pdf_path])
+        chunks = chunk_documents(docs)
+        embeddings = embed_chunks(chunks)
+
+        collection = get_collection()
+        upsert_chunks(collection, chunks, embeddings)
+
+        file_hash = compute_file_hash(pdf_path)
+
+        recreated_doc = upsert_ingested_document(
+            file_name=pdf_path.name,
+            file_path=str(pdf_path.resolve()),
+            file_hash=file_hash,
+            status="needs_extraction"
+        )
+
+        ingest_result = {"status": "single_doc_ingested"}
         steps["ingest"] = "ok"
     except Exception as e:
         steps["ingest"] = "failed"
@@ -863,6 +901,72 @@ def health():
 
 
 
+
+
+
+
+
+
+
+# ---------------- DELETE DOCUMENT (FULL CLEAN) ----------------
+@app.delete("/delete-document/{doc_id}")
+def delete_document(doc_id: int):
+    from app.db.sqlite_db import (
+        get_ingested_document_by_id,
+        list_requirement_ids_by_source,
+        delete_actions_by_requirement_ids,
+        delete_requirements_by_source,
+        delete_ingested_document_by_id,
+    )
+    from app.rag.retriever import get_collection
+
+    steps = []
+    errors = []
+
+    doc = get_ingested_document_by_id(doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    source = doc["file_name"]
+
+    try:
+        # 1. Delete actions
+        req_ids = list_requirement_ids_by_source(source)
+        if req_ids:
+            delete_actions_by_requirement_ids(req_ids)
+        steps.append("actions_deleted")
+    except Exception as e:
+        errors.append(f"actions: {e}")
+
+    try:
+        # 2. Delete requirements
+        delete_requirements_by_source(source)
+        steps.append("requirements_deleted")
+    except Exception as e:
+        errors.append(f"requirements: {e}")
+
+    try:
+        # 3. Delete vectors
+        collection = get_collection()
+        collection.delete(where={"source": source})
+        steps.append("vectors_deleted")
+    except Exception as e:
+        errors.append(f"vectors: {e}")
+
+    try:
+        # 4. Delete document row
+        delete_ingested_document_by_id(doc_id)
+        steps.append("document_deleted")
+    except Exception as e:
+        errors.append(f"document: {e}")
+
+    return {
+        "status": "deleted",
+        "steps": steps,
+        "errors": errors
+    }
+
+# -------------------------------------------------------------
 
 
 

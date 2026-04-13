@@ -1,27 +1,5 @@
 import { useEffect, useState } from "react";
 
-function statusTone(status) {
-  const s = String(status || "").toLowerCase();
-
-  if (s === "valid") {
-    return { color: "#166534", bg: "#f0fdf4", border: "#bbf7d0" };
-  }
-
-  if (s.includes("orphan")) {
-    return { color: "#92400e", bg: "#fffbeb", border: "#fde68a" };
-  }
-
-  if (s.includes("missing file")) {
-    return { color: "#92400e", bg: "#fff7ed", border: "#fdba74" };
-  }
-
-  if (s.includes("needs")) {
-    return { color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" };
-  }
-
-  return { color: "#991b1b", bg: "#fef2f2", border: "#fecaca" };
-}
-
 function ActionButton({ children, onClick, disabled }) {
   return (
     <button
@@ -69,23 +47,21 @@ export default function Documents() {
     }
   }
 
-  async function reprocessDocument(doc) {
+  async function removeDocument(doc) {
     const ok = window.confirm(
-      `Reprocess "${doc.file_name}"? Backend will handle cleanup, validation, missing requirements, and recovery as needed.`
+      `Remove "${doc.file_name}"? This will permanently delete all related data (requirements, actions, embeddings).`
     );
     if (!ok) return;
 
     try {
-      setWorkingKey(`reprocess-${doc.id}`);
+      setWorkingKey(`remove-${doc.id}`);
       setError("");
       setMessage("");
 
-      const response = await fetch(`http://127.0.0.1:8000/reingest-document/${doc.id}`, {
-        method: "POST"
-      });
+      const response = await fetch(`http://127.0.0.1:8000/delete-document/${doc.id}`, { method: "DELETE" });
 
       if (!response.ok) {
-        let msg = "Failed to reprocess document.";
+        let msg = "Failed to Remove Document.";
         try {
           const data = await response.json();
           msg = data?.detail || data?.message || msg;
@@ -104,16 +80,17 @@ export default function Documents() {
         : "";
 
       setMessage(
-        `Reprocess status: ${res?.status || "unknown"} for ${doc.file_name}. ${stepSummary}.${errorSummary}`
+        `Remove status: ${res?.status || "unknown"} for ${doc.file_name}. ${stepSummary}.${errorSummary}`
       );
 
       await loadDocs();
     } catch (err) {
-      setError(err.message || "Failed to reprocess document.");
+      setError(err.message || "Failed to Remove Document.");
     } finally {
       setWorkingKey("");
     }
   }
+
   async function handleDeleteOrphan(source) {
     const ok = window.confirm(`Delete orphan data for ${source}?`);
     if (!ok) return;
@@ -133,7 +110,6 @@ export default function Documents() {
       alert(err.message || "Error deleting orphan");
     }
   }
-
 
   useEffect(() => {
     loadDocs();
@@ -206,20 +182,18 @@ export default function Documents() {
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Embeddings</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Requirements</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Actions</th>
-                <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Status</th>
                 <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>Operation</th>
               </tr>
             </thead>
             <tbody>
               {docs.length === 0 ? (
                 <tr>
-                  <td colSpan="8" style={{ padding: "8px" }}>
+                  <td colSpan="7" style={{ padding: "8px" }}>
                     No lifecycle rows found.
                   </td>
                 </tr>
               ) : (
                 docs.map((doc, idx) => {
-                  const tone = statusTone(doc.status);
                   const rowKey = doc.type === "orphan"
                     ? `orphan-${doc.source || idx}`
                     : `doc-${doc.id}`;
@@ -244,7 +218,6 @@ export default function Documents() {
                               year: "numeric",
                               month: "short",
                               day: "2-digit",
-                              
                             })
                           : "—"}
                       </td>
@@ -266,33 +239,16 @@ export default function Documents() {
                       </td>
 
                       <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: `1px solid ${tone.border}`,
-                            background: tone.bg,
-                            color: tone.color,
-                            fontWeight: 700,
-                            fontSize: 12
-                          }}
-                        >
-                          {doc.status}
-                        </span>
-                      </td>
-
-                      <td style={{ padding: "8px", borderBottom: "1px solid #f1f1f1", verticalAlign: "top" }}>
                         {isOrphan ? (
                           <ActionButton onClick={() => handleDeleteOrphan(doc.source)}>
                             Clear Orphan
                           </ActionButton>
                         ) : canReprocess ? (
                           <ActionButton
-                            onClick={() => reprocessDocument(doc)}
-                            disabled={workingKey === `reprocess-${doc.id}`}
+                            onClick={() => removeDocument(doc)}
+                            disabled={workingKey === `remove-${doc.id}`}
                           >
-                            {workingKey === `reprocess-${doc.id}` ? "Reprocessing..." : "Reprocess Document"}
+                            {workingKey === `remove-${doc.id}` ? "Removing..." : "Remove Document"}
                           </ActionButton>
                         ) : (
                           <span style={{ fontSize: 12, color: "#6b7280" }}>—</span>
@@ -309,5 +265,6 @@ export default function Documents() {
     </div>
   );
 }
+
 
 

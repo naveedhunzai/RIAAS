@@ -125,13 +125,11 @@ function formatDateTime(value) {
 }
 
 export default function Ingest() {
-  const [path, setPath] = useState("/Users/aaronnaveed/RIAAS/backend/data/raw_docs");
   const [steps, setSteps] = useState(DEFAULT_STEPS);
   const [hasRun, setHasRun] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [lastRunAt, setLastRunAt] = useState(null);
@@ -216,7 +214,7 @@ export default function Ingest() {
         await uploadSelectedFiles();
       }
 
-      const res = await api.ingest({ path });
+      const res = await api.ingest({});
       setResult(res);
       setLastRunAt(new Date().toISOString());
 
@@ -318,150 +316,134 @@ export default function Ingest() {
           <h2
             style={{
               margin: 0,
-              fontSize: 28,
+              fontSize: 22,
               fontWeight: 800,
               color: "#111827"
             }}
           >
             Ingestion
           </h2>
-
-          <p
-            style={{
-              margin: 0,
-              color: "#4b5563",
-              lineHeight: 1.6
-            }}
-          >
-            Load, chunk, embed, and index regulatory documents into the vector
-            store. Review progress below and check file-level results after each run.
-          </p>
+          <div style={{ color: "#6b7280", fontSize: 14 }}>
+            Browse PDFs, upload them into the RIAAS raw docs folder, and run ingestion.
+          </div>
         </div>
 
-        <div style={{ display: "grid", gap: 8 }}>
-          <label
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#111827"
-            }}
-          >
-            Document folder path
-          </label>
-
-          <input
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder="/Users/aaronnaveed/RIAAS/backend/data/raw_docs"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              borderRadius: 12,
-              border: "1px solid #d1d5db",
-              background: "#f9fafb",
-              color: "#111827",
-              fontSize: 14,
-              boxSizing: "border-box",
-              outline: "none"
-            }}
-          />
-        </div>
-
-        <div style={{ display: "grid", gap: 8 }}>
-          <label
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: "#111827"
-            }}
-          >
-            Browse PDFs
-          </label>
-
+        <div
+          style={{
+            background: "#ffffff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 16,
+            padding: 18,
+            marginBottom: 16
+          }}
+        >
           <div
-            onDrop={onDrop}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
             style={{
-              border: `2px dashed ${dragging ? "#3b82f6" : "#d1d5db"}`,
-              background: dragging ? "#eff6ff" : "#f9fafb",
-              borderRadius: 14,
-              padding: 16
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#111827",
+              marginBottom: 12
             }}
           >
-            <div
+            Documents to Ingest
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <label
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap"
+                fontSize: 14,
+                fontWeight: 700,
+                color: "#111827"
               }}
             >
-              <div>
-                <div style={{ fontWeight: 700, color: "#111827", marginBottom: 4 }}>
-                  Add files with Browse
-                </div>
-                <div style={{ fontSize: 13, color: "#6b7280" }}>
-                  Browsed PDFs will be uploaded into the RIAAS raw docs folder before ingestion runs.
-                </div>
-              </div>
+              Browse PDFs
+            </label>
 
-              <button
-                type="button"
-                onClick={handleBrowseClick}
-                style={{
-                  padding: "10px 16px",
-                  borderRadius: 10,
-                  border: "1px solid #d1d5db",
-                  background: "#ffffff",
-                  color: "#111827",
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: 14
-                }}
-              >
-                Browse Files
-              </button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                multiple
-                onChange={onInputChange}
-                style={{ display: "none" }}
-              />
-            </div>
-
-            {selectedFiles.length > 0 && (
+            <div
+              onDrop={onDrop}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              style={{
+                border: `2px dashed ${dragging ? "#3b82f6" : "#d1d5db"}`,
+                background: dragging ? "#eff6ff" : "#f9fafb",
+                borderRadius: 14,
+                padding: 16
+              }}
+            >
               <div
                 style={{
-                  marginTop: 12,
-                  display: "grid",
-                  gap: 8
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap"
                 }}
               >
-                {selectedFiles.map((file, index) => (
-                  <div
-                    key={`${file.name}-${index}`}
-                    style={{
-                      background: "#ffffff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 10,
-                      padding: "9px 12px",
-                      fontSize: 14,
-                      color: "#111827"
-                    }}
-                  >
-                    {file.name}
+                <div>
+                  <div style={{ fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                    Add files with Browse
                   </div>
-                ))}
+                  <div style={{ fontSize: 13, color: "#6b7280" }}>
+                    Browsed PDFs will be uploaded into the RIAAS raw docs folder before ingestion runs.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBrowseClick}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 10,
+                    border: "1px solid #d1d5db",
+                    background: "#ffffff",
+                    color: "#111827",
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 14
+                  }}
+                >
+                  Browse Files
+                </button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  onChange={onInputChange}
+                  style={{ display: "none" }}
+                />
               </div>
-            )}
+
+              {selectedFiles.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "grid",
+                    gap: 8
+                  }}
+                >
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      style={{
+                        background: "#ffffff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 10,
+                        padding: "9px 12px",
+                        fontSize: 14,
+                        color: "#111827"
+                      }}
+                    >
+                      {file.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -618,7 +600,6 @@ export default function Ingest() {
             <DetailCard label="Changed files" value={result?.changed_files?.length ?? 0} />
             <DetailCard label="Skipped files" value={result?.skipped_files?.length ?? 0} />
             <DetailCard label="Processed files" value={totalProcessedFiles} />
-            <DetailCard label="Selected PDFs" value={selectedFiles.length} />
           </div>
         </div>
 
